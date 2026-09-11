@@ -1,10 +1,15 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows.Forms;
-using Newtonsoft.Json;
 
 namespace ED_TimeSlide
 {
@@ -15,6 +20,7 @@ namespace ED_TimeSlide
         private int foundOutliersCount = 0;
         private const double MaxAllowedErrorPercent = 5.0; // Maximum allowed error percentage for validation
         private const double MaxStellarVarianceLs = 25.0; // Maximum allowed variance in Light Seconds for stellar bodies
+        private const double MinStellarDistanceForStars = 50000.0; // Minimum allowed distance in Light Seconds for stars
 
         // ─── REGISTRY DATA STORES ───
         // Key format string: "StarSystemName_BodyID" (e.g., "Gondul_2")
@@ -41,6 +47,7 @@ namespace ED_TimeSlide
             //testing setup of ease
             txtFolderPath.Text = @"E:\Elite Dangerous\EDDN data\Raw Data\Scan\Test";
             btnStartAnalysis.Enabled = true;
+            txtWebCachePath.Text = @"E:\Elite Dangerous\EDDN data\Raw Data\Other";
         }
 
         private void InitializeBackgroundWorker()
@@ -156,20 +163,154 @@ namespace ED_TimeSlide
 
         private void AnalysisWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
+            // 1. SAVE PHASE 1 RESULTS
             SaveRegistriesToDisk();
 
-            btnSelectFolder.Enabled = true;
-            btnStartAnalysis.Enabled = true;
+            // 2. UI & LOGGING UPDATES
+            if (e.Result != null) LogMessage(e.Result.ToString());
 
-            if (e.Result != null)
+            // 3. CHECK FOR ANOMALIES TO PROCESS
+            string anomaliesReportPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DetectedAnomalies.json");
+            string masterReportOutPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FinalTimeSlipDossier.md");
+
+            if (!File.Exists(anomaliesReportPath))
             {
-                LogMessage(e.Result.ToString());
+                LogMessage("Phase 2 Complete: No anomalies logged to track.");
+                ResetUiState();
+                return;
+            }
+
+            LogMessage("Starting Phase 2: Assembling Commander Flight Paths (Local Scan)...");
+
+            // 4. PREPARE THE DOSSIER
+            if (File.Exists(masterReportOutPath)) File.Delete(masterReportOutPath);
+
+            string[] anomalyLines = File.ReadAllLines(anomaliesReportPath);
+            HashSet<string> processedLookups = new HashSet<string>();
+            int dossiersWritten = 0;
+
+            // Write Header
+            File.WriteAllText(masterReportOutPath, $"# 🚀 ELITE DANGEROUS TIME-SLIP INVESTIGATION DOSSIER{Environment.NewLine}");
+            File.AppendAllText(masterReportOutPath, $"Generated on: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC{Environment.NewLine}");
+            File.AppendAllText(masterReportOutPath, $"Scan Source: Local Files{Environment.NewLine}{Environment.NewLine}---{Environment.NewLine}");
+
+            // 5. LOOP THROUGH ANOMALIES
+            foreach (string line in anomalyLines)
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                try
+                {
+                    dynamic anomaly = JsonConvert.DeserializeObject(line);
+                    string uploaderId = anomaly.UploaderID;
+                    DateTime eventTime = anomaly.EventTimestamp;
+                    string systemName = anomaly.StarSystem;
+                    string bodyName = anomaly.BodyName;
+                    string ghostDate = anomaly.GhostDateZulu;
+                    double reportedDist = anomaly.ReportedDistance;
+                    double expectedDist = anomaly.ExpectedDistance;
+
+                    string sourceFile = anomaly.SourceArchive ?? "";
+
+                    // 1. DETERMINE TARGET DATE
+                    // Default to Event Date
+                    string targetSearchDate = eventTime.ToString("yyyy-MM-dd");
+
+                    // Try to override with the File Date (Upload Date) if available
+                    string fileDate = ExtractDateFromFilename(sourceFile);
+                    if (!string.IsNullOrEmpty(fileDate))
+                    {
+                        targetSearchDate = fileDate;
+                    }
+
+                    // Deduplication
+                    string lookupToken = $"{uploaderId}_{targetSearchDate}";
+                    if (processedLookups.Contains(lookupToken)) continue;
+                    processedLookups.Add(lookupToken);
+
+                    LogMessage($"[LOCAL HUNT] Assembling flight path for {uploaderId} in files dated {targetSearchDate}...");
+
+                    // 6. CALL THE LOCAL FETCH METHOD
+                    // We pass 'txtFolderPath.Text' to force it to look in your existing scan folder
+                    List<JourneyTimelineEvent> journey = FetchCommanderJourneyLocal(
+                        targetSearchDate,
+                        uploaderId,
+                        txtFolderPath.Text,
+                        txtWebCachePath.Text,
+                        sourceFile
+                    );
+
+                    dossiersWritten++;
+
+                    // 7. WRITE TO MARKDOWN
+                    using (StreamWriter sw = File.AppendText(masterReportOutPath))
+                    {
+                        sw.WriteLine($"## 🛰️ Anomaly Target: {bodyName} ({systemName})");
+                        sw.WriteLine($"- **Detection Timestamp:** `{eventTime:yyyy-MM-dd HH:mm:ss} UTC`");
+                        sw.WriteLine($"- **Ghost Target Date:** `{ghostDate}`");
+                        sw.WriteLine($"- **Commander Token:** `{uploaderId}`");
+                        sw.WriteLine();
+                        sw.WriteLine("### 📅 Chronological Flight Timeline Log");
+
+                        if (journey.Count == 0)
+                        {
+                            sw.WriteLine("> *No event history found in local files for this commander on this day.*");
+                        }
+                        else
+                        {
+                            foreach (var ev in journey)
+                            {
+                                // ANOMALY MATCHING LOGIC
+                                // We flag it if it's a SCAN event, for the right BODY, within 2 seconds of the log time
+                                bool isTheAnomaly = (ev.EventType == "Scan")
+                                                    && (ev.BodyName == bodyName)
+                                                    && Math.Abs((ev.Timestamp - eventTime).TotalSeconds) < 5;
+
+                                string timestamp = $"`{ev.Timestamp:HH:mm:ss}`";
+                                string evtType = $"**{ev.EventType}**";
+                                string info = $"System: *{ev.StarSystem}* | Body: *{ev.BodyName}* {ev.DetailInfo}";
+
+                                if (isTheAnomaly)
+                                {
+                                    // 🔴 RED HIGHLIGHT
+                                    sw.WriteLine($"- {timestamp} 🔴 {evtType} {info} **<-- [ANOMALY DETECTED]**");
+                                    sw.WriteLine($"    - *Reported:* `{reportedDist:F2} LS`");
+                                    sw.WriteLine($"    - *Expected:* `{expectedDist:F2} LS`");
+                                    sw.WriteLine($"    - *Variance:* `{Math.Abs(reportedDist - expectedDist):F2} LS`");
+                                }
+                                else
+                                {
+                                    // Standard Line
+                                    sw.WriteLine($"- {timestamp} {evtType} {info}");
+                                }
+                            }
+                        }
+                        sw.WriteLine();
+                        sw.WriteLine("---");
+                        sw.WriteLine();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Fail silently on a single bad line so the report finishes
+                    System.Diagnostics.Debug.WriteLine($"Report Gen Error: {ex.Message}");
+                }
             }
 
             LogMessage("==================================================");
-            LogMessage("PROCESS STATUS: Full Analysis Sweep Completed Successfully.");
+            LogMessage($"PHASE 2 SUCCESS: Compiled {dossiersWritten} Investigation Records!");
+            LogMessage($"Markdown File Saved to: {masterReportOutPath}");
             LogMessage("==================================================");
+
+            ResetUiState();
         }
+
+        private void ResetUiState()
+        {
+            btnSelectFolder.Enabled = true;
+            btnStartAnalysis.Enabled = true;
+        }
+
 
         private void LogMessage(string message)
         {
@@ -482,6 +623,12 @@ namespace ED_TimeSlide
         private void EvaluateRecordAgainstRegistry(EddnScanRecord record)
         {
             var msg = record.Message;
+
+            // DISTANCE GATE FILTER: Turn off secondary star noise and distant binary sun sets instantly.
+            // If the body sits further than 10,000 LS out, it's a deep system outlier. We drop it.
+
+            if (msg.DistanceFromArrivalLS <= MinStellarDistanceForStars) return;
+
             // Create a unique composite lookup key for the specific planet or star body
             string basePlanetKey = $"{msg.SystemAddress}_{msg.BodyId}";
 
@@ -709,7 +856,180 @@ namespace ED_TimeSlide
                 }
             }
         }
+        //if (targetUploaderId != "7abccbb30f4bfef60d3218aa7d1bd9afdf78a319") { return timeline; }
 
+        /// <summary>
+        /// Connects to the online database archive, downloads the target date block log,
+        /// and extracts every tracking movement marker belonging to a specific anomalous Commander.
+        /// </summary>
+        private List<JourneyTimelineEvent> FetchCommanderJourneyLocal(string targetDateYyyyMmDd, string targetUploaderId, string scanFolder, string cacheFolder, string specificSourceFile = "")
+        {
+            var timeline = new List<JourneyTimelineEvent>();
+            var filesToProcess = new HashSet<string>(); // Use HashSet to avoid duplicates automatically
+
+            // 1. Identify which folders to search
+            var searchPaths = new List<string>();
+
+            if (Directory.Exists(scanFolder)) searchPaths.Add(scanFolder);
+
+            // Only add cache folder if it exists and is different from scan folder
+            if (!string.IsNullOrWhiteSpace(cacheFolder) && Directory.Exists(cacheFolder)
+                && !searchPaths.Contains(cacheFolder))
+            {
+                searchPaths.Add(cacheFolder);
+            }
+
+            // 2. Gather ALL matching files from ALL locations
+            foreach (string folder in searchPaths)
+            {
+                try
+                {
+                    var found = Directory.GetFiles(folder, $"*{targetDateYyyyMmDd}*", SearchOption.AllDirectories)
+                                                     .Where(f => f.EndsWith(".rar") || f.EndsWith(".bz2") || f.EndsWith(".jsonl") || f.EndsWith(".zip"));
+                    foreach (var f in found) filesToProcess.Add(f);
+                }
+                catch { }
+            }
+
+            // 2. FORCE INCLUDE THE SOURCE FILE (if valid path provided)
+            if (!string.IsNullOrEmpty(specificSourceFile) && File.Exists(specificSourceFile))
+            {
+                filesToProcess.Add(specificSourceFile);
+            }
+            // Handle case where specificSourceFile is just a filename (e.g. "Journal.Scan...") inside scanFolder
+            else if (!string.IsNullOrEmpty(specificSourceFile) && Directory.Exists(scanFolder))
+            {
+                string potentialPath = Path.Combine(scanFolder, Path.GetFileName(specificSourceFile));
+                if (File.Exists(potentialPath)) filesToProcess.Add(potentialPath);
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[LOCAL HUNT] Found {filesToProcess.Count} total files for {targetDateYyyyMmDd} across {searchPaths.Count} folders.");
+
+            string winRarPath = @"C:\Program Files\WinRAR\WinRAR.exe";
+            if (!File.Exists(winRarPath)) winRarPath = @"C:\Program Files (x86)\WinRAR\WinRAR.exe";
+
+            // 3. Process the Aggregated List
+            foreach (string filePath in filesToProcess)
+            {
+                string[] filesToRead = new string[] { };
+                string tempDir = "";
+                bool isArchive = false;
+
+                try
+                {
+                    // CASE A: Raw Text File
+                    if (filePath.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase))
+                    {
+                        filesToRead = new string[] { filePath };
+                    }
+                    // CASE B: Archive -> Extract to Temp
+                    else
+                    {
+                        isArchive = true;
+                        tempDir = Path.Combine(Path.GetTempPath(), $"ED_Extract_{Guid.NewGuid()}");
+                        Directory.CreateDirectory(tempDir);
+
+                        ProcessStartInfo startInfo = new ProcessStartInfo
+                        {
+                            FileName = winRarPath,
+                            Arguments = $"e -y -ibck \"{filePath}\" \"{tempDir}\\\"",
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+
+                        using (Process p = Process.Start(startInfo))
+                        {
+                            p.WaitForExit();
+                        }
+
+                        // FIX: Recursive search to handle WinRAR subfolders
+                        if (Directory.Exists(tempDir))
+                        {
+                            filesToRead = Directory.GetFiles(tempDir, "*.*", SearchOption.AllDirectories);
+                        }
+                    }
+
+                    // 4. READ DATA
+                    foreach (string file in filesToRead)
+                    {
+                        if (new FileInfo(file).Length == 0) continue;
+
+                        foreach (string line in File.ReadLines(file))
+                        {
+                            if (!line.Contains(targetUploaderId)) continue;
+
+                            try
+                            {
+                                var record = JsonConvert.DeserializeObject<EddnGenericRecord>(line);
+                                if (record?.Message != null)
+                                {
+                                    string evt = record.Message.EventName;
+                                    if (evt == "FSDJump" || evt == "Location" || evt == "CarrierJump"
+                                        || evt == "ApproachSettlement" || evt == "Scan" || evt == "Docked" || evt == "Undocked")
+                                    {
+                                        string resolvedSystem = record.Message.StarSystem ?? record.Message.System ?? "Unknown";
+                                        string resolvedBody = record.Message.BodyName ?? record.Message.Body ?? "";
+                                        string details = record.Message.StationName ?? record.Message.Name ?? "";
+
+                                        timeline.Add(new JourneyTimelineEvent
+                                        {
+                                            Timestamp = record.Message.Timestamp,
+                                            EventType = evt,
+                                            StarSystem = resolvedSystem,
+                                            BodyName = resolvedBody,
+                                            DetailInfo = details
+                                        });
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error processing {filePath}: {ex.Message}");
+                }
+                finally
+                {
+                    if (isArchive && !string.IsNullOrEmpty(tempDir) && Directory.Exists(tempDir))
+                    {
+                        try { Directory.Delete(tempDir, true); } catch { }
+                    }
+                }
+            }
+
+            // 5. Sort & Unique
+            return timeline.GroupBy(x => x.Timestamp)
+                           .Select(g => g.First())
+                           .OrderBy(x => x.Timestamp)
+                           .ToList();
+        }
+
+
+
+
+        private void btnSelectWebCache_Click(object sender, EventArgs e)
+        {
+            if (folderBrowserDialogCache.ShowDialog() == DialogResult.OK)
+            {
+                txtWebCachePath.Text = folderBrowserDialogCache.SelectedPath;
+
+                // Optional: Save this path to Properties.Settings.Default so it remembers next time
+                LogMessage($"Web Cache set to: {txtWebCachePath.Text}");
+            }
+        }
+
+        private string ExtractDateFromFilename(string filename)
+        {
+            // Looks for a pattern like "2025-10-29" inside any string
+            var match = Regex.Match(filename, @"\d{4}-\d{2}-\d{2}");
+            if (match.Success)
+            {
+                return match.Value;
+            }
+            return null;
+        }
 
     }
 }

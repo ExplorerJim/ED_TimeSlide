@@ -126,6 +126,7 @@
     <Compile Include="frm_Journey_Tracker.Designer.cs">
       <DependentUpon>frm_Journey_Tracker.cs</DependentUpon>
     </Compile>
+    <Compile Include="JourneyTrackerModels.cs" />
     <Compile Include="KeplerOrbitSolver.cs" />
     <Compile Include="MDIMain.cs">
       <SubType>Form</SubType>
@@ -136,6 +137,7 @@
     <Compile Include="OrbitRegistryModels.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TrendVisualizer.cs" />
     <EmbeddedResource Include="Form1.resx">
       <DependentUpon>Form1.cs</DependentUpon>
     </EmbeddedResource>

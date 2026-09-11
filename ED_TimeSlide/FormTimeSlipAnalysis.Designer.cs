@@ -36,6 +36,9 @@
             this.rtbLog = new System.Windows.Forms.RichTextBox();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.txtWebCachePath = new System.Windows.Forms.TextBox();
+            this.btnSelectWebCache = new System.Windows.Forms.Button();
+            this.folderBrowserDialogCache = new System.Windows.Forms.FolderBrowserDialog();
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
             this.SuspendLayout();
@@ -43,9 +46,9 @@
             // btnSelectFolder
             // 
             this.btnSelectFolder.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnSelectFolder.Location = new System.Drawing.Point(678, 16);
+            this.btnSelectFolder.Location = new System.Drawing.Point(631, 16);
             this.btnSelectFolder.Name = "btnSelectFolder";
-            this.btnSelectFolder.Size = new System.Drawing.Size(75, 23);
+            this.btnSelectFolder.Size = new System.Drawing.Size(122, 23);
             this.btnSelectFolder.TabIndex = 0;
             this.btnSelectFolder.Text = "Select Scan Folder...";
             this.btnSelectFolder.UseVisualStyleBackColor = true;
@@ -58,7 +61,7 @@
             this.txtFolderPath.Location = new System.Drawing.Point(6, 19);
             this.txtFolderPath.Name = "txtFolderPath";
             this.txtFolderPath.ReadOnly = true;
-            this.txtFolderPath.Size = new System.Drawing.Size(666, 20);
+            this.txtFolderPath.Size = new System.Drawing.Size(619, 20);
             this.txtFolderPath.TabIndex = 1;
             // 
             // btnStartAnalysis
@@ -66,7 +69,7 @@
             this.btnStartAnalysis.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.btnStartAnalysis.Enabled = false;
-            this.btnStartAnalysis.Location = new System.Drawing.Point(13, 72);
+            this.btnStartAnalysis.Location = new System.Drawing.Point(13, 92);
             this.btnStartAnalysis.Name = "btnStartAnalysis";
             this.btnStartAnalysis.Size = new System.Drawing.Size(759, 23);
             this.btnStartAnalysis.TabIndex = 2;
@@ -90,7 +93,7 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.rtbLog.Location = new System.Drawing.Point(6, 48);
             this.rtbLog.Name = "rtbLog";
-            this.rtbLog.Size = new System.Drawing.Size(747, 393);
+            this.rtbLog.Size = new System.Drawing.Size(747, 373);
             this.rtbLog.TabIndex = 4;
             this.rtbLog.Text = "";
             // 
@@ -98,11 +101,13 @@
             // 
             this.groupBox1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
+            this.groupBox1.Controls.Add(this.txtWebCachePath);
             this.groupBox1.Controls.Add(this.txtFolderPath);
+            this.groupBox1.Controls.Add(this.btnSelectWebCache);
             this.groupBox1.Controls.Add(this.btnSelectFolder);
             this.groupBox1.Location = new System.Drawing.Point(13, 13);
             this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Size = new System.Drawing.Size(759, 53);
+            this.groupBox1.Size = new System.Drawing.Size(759, 73);
             this.groupBox1.TabIndex = 5;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Inputs";
@@ -114,12 +119,33 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.groupBox2.Controls.Add(this.progressBarFiles);
             this.groupBox2.Controls.Add(this.rtbLog);
-            this.groupBox2.Location = new System.Drawing.Point(13, 101);
+            this.groupBox2.Location = new System.Drawing.Point(13, 121);
             this.groupBox2.Name = "groupBox2";
-            this.groupBox2.Size = new System.Drawing.Size(759, 447);
+            this.groupBox2.Size = new System.Drawing.Size(759, 427);
             this.groupBox2.TabIndex = 6;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "Output";
+            // 
+            // txtWebCachePath
+            // 
+            this.txtWebCachePath.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.txtWebCachePath.Location = new System.Drawing.Point(6, 45);
+            this.txtWebCachePath.Name = "txtWebCachePath";
+            this.txtWebCachePath.ReadOnly = true;
+            this.txtWebCachePath.Size = new System.Drawing.Size(619, 20);
+            this.txtWebCachePath.TabIndex = 1;
+            // 
+            // btnSelectWebCache
+            // 
+            this.btnSelectWebCache.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.btnSelectWebCache.Location = new System.Drawing.Point(631, 43);
+            this.btnSelectWebCache.Name = "btnSelectWebCache";
+            this.btnSelectWebCache.Size = new System.Drawing.Size(122, 23);
+            this.btnSelectWebCache.TabIndex = 0;
+            this.btnSelectWebCache.Text = "Select Other Folder...";
+            this.btnSelectWebCache.UseVisualStyleBackColor = true;
+            this.btnSelectWebCache.Click += new System.EventHandler(this.btnSelectWebCache_Click);
             // 
             // FormTimeSlipAnalysis
             // 
@@ -149,5 +175,8 @@
         private System.Windows.Forms.RichTextBox rtbLog;
         private System.Windows.Forms.GroupBox groupBox1;
         private System.Windows.Forms.GroupBox groupBox2;
+        private System.Windows.Forms.TextBox txtWebCachePath;
+        private System.Windows.Forms.Button btnSelectWebCache;
+        private System.Windows.Forms.FolderBrowserDialog folderBrowserDialogCache;
     }
 }
