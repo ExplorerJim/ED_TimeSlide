@@ -35,6 +35,7 @@ namespace ED_TimeSlide
         frm_ReduceFileSize inst_ReduceFileSize;
         frm_Process1 inst_Process1;
         frm_Journey_Tracker inst_Journey_Tracker;
+        FormTimeSlipAnalysis inst_FormTimeSlipAnalysis;
         #endregion
 
         public MDIMain()
@@ -44,7 +45,9 @@ namespace ED_TimeSlide
             Load_Variables();
 
             //Load_Form_Instance(inst_Process1);
-            Load_Form_Instance(inst_Journey_Tracker);
+            //Load_Form_Instance(inst_Journey_Tracker);
+            
+            Load_Form_Instance(inst_FormTimeSlipAnalysis);
         }
         #region Tool Strip
         private void form1ToolStripMenuItem1_Click(object sender, EventArgs e)
@@ -63,6 +66,16 @@ namespace ED_TimeSlide
         {
             Load_Form_Instance(inst_Journey_Tracker);
         }
+        private void fullAutomatedToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if(inst_FormTimeSlipAnalysis == null || inst_FormTimeSlipAnalysis.IsDisposed)
+            {
+                inst_FormTimeSlipAnalysis = new FormTimeSlipAnalysis();
+                inst_FormTimeSlipAnalysis.MdiParent = this;
+            }
+
+            Load_Form_Instance(inst_FormTimeSlipAnalysis);
+        }
         #endregion
         #region Private Functions
         private void Load_Variables()
@@ -75,6 +88,9 @@ namespace ED_TimeSlide
 
             inst_Journey_Tracker = new frm_Journey_Tracker();
             inst_Journey_Tracker.MdiParent = this;
+
+            inst_FormTimeSlipAnalysis = new FormTimeSlipAnalysis();
+            inst_FormTimeSlipAnalysis.MdiParent = this;
         }
         #region Private Functions - Load Forms
         private void Load_Form_Instance(Form form)
