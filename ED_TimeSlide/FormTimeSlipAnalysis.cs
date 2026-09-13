@@ -626,7 +626,6 @@ namespace ED_TimeSlide
 
             // DISTANCE GATE FILTER: Turn off secondary star noise and distant binary sun sets instantly.
             // If the body sits further than 10,000 LS out, it's a deep system outlier. We drop it.
-
             if (msg.DistanceFromArrivalLS <= MinStellarDistanceForStars) return;
 
             // Create a unique composite lookup key for the specific planet or star body
