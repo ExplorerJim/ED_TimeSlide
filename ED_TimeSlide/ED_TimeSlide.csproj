@@ -102,6 +102,12 @@
     <Compile Include="Form1.Designer.cs">
       <DependentUpon>Form1.cs</DependentUpon>
     </Compile>
+    <Compile Include="FormRegistryEngine.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FormRegistryEngine.Designer.cs">
+      <DependentUpon>FormRegistryEngine.cs</DependentUpon>
+    </Compile>
     <Compile Include="FormTimeSlipAnalysis.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -139,6 +145,9 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="Form1.resx">
       <DependentUpon>Form1.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="FormRegistryEngine.resx">
+      <DependentUpon>FormRegistryEngine.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="FormTimeSlipAnalysis.resx">
       <DependentUpon>FormTimeSlipAnalysis.cs</DependentUpon>

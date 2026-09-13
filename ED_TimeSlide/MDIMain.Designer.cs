@@ -97,7 +97,7 @@
             this.MainMenuStrip = this.menuStrip1;
             this.Name = "MDIMain";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "ED Time Slide V1.00";
+            this.Text = "ED Time Slide V1.06";
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             this.menuStrip1.ResumeLayout(false);
             this.menuStrip1.PerformLayout();
