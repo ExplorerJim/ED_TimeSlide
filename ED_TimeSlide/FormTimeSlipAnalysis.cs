@@ -29,7 +29,6 @@ namespace ED_TimeSlide
 
         // Storage paths for the local registry state
         private readonly string masterRegistryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MasterOrbitRegistry.json");
-        private readonly string stagingRegistryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "StagingOrbitRegistry.json");
 
         // Tracking variable to log which file is actively being scraped
         private string currentArchiveName = "";
@@ -163,13 +162,10 @@ namespace ED_TimeSlide
 
         private void AnalysisWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-            // 1. SAVE PHASE 1 RESULTS
-            SaveRegistriesToDisk();
-
-            // 2. UI & LOGGING UPDATES
+            // 1. UI & LOGGING UPDATES
             if (e.Result != null) LogMessage(e.Result.ToString());
 
-            // 3. CHECK FOR ANOMALIES TO PROCESS
+            // 2. CHECK FOR ANOMALIES TO PROCESS
             string anomaliesReportPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DetectedAnomalies.json");
             string masterReportOutPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FinalTimeSlipDossier.md");
 
@@ -182,7 +178,7 @@ namespace ED_TimeSlide
 
             LogMessage("Starting Phase 2: Assembling Commander Flight Paths (Local Scan)...");
 
-            // 4. PREPARE THE DOSSIER
+            // 3. PREPARE THE DOSSIER
             if (File.Exists(masterReportOutPath)) File.Delete(masterReportOutPath);
 
             string[] anomalyLines = File.ReadAllLines(anomaliesReportPath);
@@ -194,7 +190,7 @@ namespace ED_TimeSlide
             File.AppendAllText(masterReportOutPath, $"Generated on: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC{Environment.NewLine}");
             File.AppendAllText(masterReportOutPath, $"Scan Source: Local Files{Environment.NewLine}{Environment.NewLine}---{Environment.NewLine}");
 
-            // 5. LOOP THROUGH ANOMALIES
+            // 4. LOOP THROUGH ANOMALIES
             foreach (string line in anomalyLines)
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
@@ -212,7 +208,7 @@ namespace ED_TimeSlide
 
                     string sourceFile = anomaly.SourceArchive ?? "";
 
-                    // 1. DETERMINE TARGET DATE
+                    // 5. DETERMINE TARGET DATE
                     // Default to Event Date
                     string targetSearchDate = eventTime.ToString("yyyy-MM-dd");
 
@@ -327,68 +323,6 @@ namespace ED_TimeSlide
             }
         }
 
-        /// <summary>
-        /// Spawns a background process to read text output directly out of a targeted .rar archive.
-        /// </summary>
-        private void StreamRarArchiveContents(string rarPath, BackgroundWorker worker, int currentProgress)
-        {
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = winRarExePath,
-                Arguments = $"p -inul \"{rarPath}\"", // Tells WinRAR to extract files strictly to stdout stream
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true
-            };
-
-            try
-            {
-                using (Process process = Process.Start(startInfo))
-                {
-                    using (StreamReader streamReader = process.StandardOutput)
-                    {
-                        string textLine;
-                        while ((textLine = streamReader.ReadLine()) != null)
-                        {
-                            processedLinesCount++;
-
-                            if (string.IsNullOrWhiteSpace(textLine)) continue;
-                            if (!textLine.Contains("\"event\":\"Scan\"")) continue;
-
-                            // Route the line to our deserialization and validation filter
-                            ProcessScanJsonLine(textLine);
-                        }
-                    }
-                    process.WaitForExit();
-                }
-            }
-            catch (Exception ex)
-            {
-                worker.ReportProgress(currentProgress, $"[ERROR] Failed streaming {Path.GetFileName(rarPath)}: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Deserializes raw text lines and hands them off to the validation layer.
-        /// </summary>
-        private void ProcessScanJsonLine(string jsonLine)
-        {
-            try
-            {
-                var record = JsonConvert.DeserializeObject<EddnScanRecord>(jsonLine);
-                if (record?.Message != null && record.Message.EventName == "Scan")
-                {
-                    // ─── STAGING AND MASTER REGISTRY ATTACHMENT HUB ───
-                    // Now this is an incredibly clean location to add our physics checks!
-                    // EvaluateRecordAgainstRegistry(record);
-                }
-            }
-            catch (JsonException)
-            {
-                // Silently swallow broken text pieces or packet fractures
-            }
-        }
-
         private void StreamRarArchive(string rarPath, BackgroundWorker worker, int currentProgress)
         {
             ProcessStartInfo startInfo = new ProcessStartInfo
@@ -481,43 +415,15 @@ namespace ED_TimeSlide
                                      ?? new Dictionary<string, MasterOrbitAnchor>();
                     LogMessage($"Loaded {masterRegistry.Count} verified anchors from Master Registry.");
                 }
-
-                if (File.Exists(stagingRegistryPath))
+                else
                 {
-                    string json = File.ReadAllText(stagingRegistryPath);
-                    stagingRegistry = JsonConvert.DeserializeObject<Dictionary<string, StagingOrbitBlock>>(json)
-                                      ?? new Dictionary<string, StagingOrbitBlock>();
-                    LogMessage($"Loaded {stagingRegistry.Count} pending bodies from Staging Registry.");
+                    LogMessage("No existing Master Registry found. Starting fresh not sure what will happen.");
                 }
+
             }
             catch (Exception ex)
             {
                 LogMessage($"[WARNING] Failed initializing registry configuration files: {ex.Message}");
-            }
-        }
-
-        private void SaveRegistriesToDisk()
-        {
-            try
-            {
-                // STREAM SAVING: Writes directly to disk byte-by-byte, using 0MB of excess RAM string buffers!
-                using (StreamWriter sw = new StreamWriter(masterRegistryPath, false))
-                using (JsonTextWriter jw = new JsonTextWriter(sw))
-                {
-                    JsonSerializer serializer = new JsonSerializer { Formatting = Formatting.None }; // None saves space!
-                    serializer.Serialize(jw, masterRegistry);
-                }
-
-                using (StreamWriter sw = new StreamWriter(stagingRegistryPath, false))
-                using (JsonTextWriter jw = new JsonTextWriter(sw))
-                {
-                    JsonSerializer serializer = new JsonSerializer { Formatting = Formatting.None };
-                    serializer.Serialize(jw, stagingRegistry);
-                }
-            }
-            catch (Exception ex)
-            {
-                LogMessage($"[ERROR] Failed syncing registry cache disk write: {ex.Message}");
             }
         }
 
@@ -620,13 +526,20 @@ namespace ED_TimeSlide
 
             return false;
         }
+ 
         private void EvaluateRecordAgainstRegistry(EddnScanRecord record)
         {
             var msg = record.Message;
 
+            // Ignore primary suns
+            if (msg.BodyId == 0) return;
+
+            // Ignore belt and ring clusters, as they are not valid orbital bodies
+            if (msg.BodyName.Contains("Belt Cluster") || msg.BodyName.Contains("Ring Cluster")) return;
+
             // DISTANCE GATE FILTER: Turn off secondary star noise and distant binary sun sets instantly.
             // If the body sits further than 10,000 LS out, it's a deep system outlier. We drop it.
-            if (msg.DistanceFromArrivalLS <= MinStellarDistanceForStars) return;
+            if (msg.StarType != null && msg.DistanceFromArrivalLS <= MinStellarDistanceForStars) return;
 
             // Create a unique composite lookup key for the specific planet or star body
             string basePlanetKey = $"{msg.SystemAddress}_{msg.BodyId}";
@@ -694,115 +607,12 @@ namespace ED_TimeSlide
                     anchor.LastCheckedTimestamp = currentTimestampSeconds;
                 }
             }
-            // SCENARIO B: The body is still gathering evidence in staging
+            // SCENARIO B: The body is not in the master registry
             else
             {
-                string uploaderId = record.Header?.UploaderId ?? "Anonymous";
-                string stagingLookupKey = $"{basePlanetKey}_{uploaderId}";
-
-                // COLD-START STAR FIX: If this is a star, bypass the 5-point planet wait entirely!
-                if (!string.IsNullOrEmpty(msg.StarType) || msg.OrbitalPeriod <= 0)
-                {
-                    var starAnchor = new MasterOrbitAnchor
-                    {
-                        SemiMajorAxis = msg.SemiMajorAxis,
-                        Eccentricity = msg.Eccentricity,
-                        OrbitalPeriod = msg.OrbitalPeriod,
-                        AnchorTimestamp = currentTimestampSeconds,
-                        AnchorDistance = currentDistance, // Locks the first point as the truth anchor
-                        VerifiedSourceFile = currentArchiveName,
-                        SoftwareName = record.Header?.SoftwareName ?? "UnknownTool",
-                        IsClimbingOutward = false,
-                        LastCheckedTimestamp = currentTimestampSeconds
-                    };
-
-                    // Save immediately to master and skip staging entirely
-                    masterRegistry[basePlanetKey] = starAnchor;
-                    return; // Exit out so the next line can evaluate against this new master anchor!
-                }
-
-                if (!stagingRegistry.TryGetValue(stagingLookupKey, out StagingOrbitBlock stagingBlock))
-                {
-                    stagingBlock = new StagingOrbitBlock
-                    {
-                        SemiMajorAxis = msg.SemiMajorAxis,
-                        Eccentricity = msg.Eccentricity,
-                        OrbitalPeriod = msg.OrbitalPeriod
-                    };
-                    stagingRegistry[stagingLookupKey] = stagingBlock;
-                }
-
-                var newPoint = new StagedPoint
-                {
-                    Timestamp = currentTimestampSeconds,
-                    Distance = currentDistance,
-                    SourceFile = currentArchiveName,
-                    SoftwareName = record.Header?.SoftwareName ?? "UnknownTool",
-                    UploaderId = uploaderId
-                };
-
-                stagingBlock.CollectedPoints.Add(newPoint);
-
-                if (stagingBlock.CollectedPoints.Count == 5)
-                {
-                    if (TryValidateStagingCluster(stagingBlock, out MasterOrbitAnchor verifiedAnchor, out List<StagedPoint> structuralOutliers))
-                    {
-                        verifiedAnchor.LastCheckedTimestamp = verifiedAnchor.AnchorTimestamp;
-                        masterRegistry[basePlanetKey] = verifiedAnchor;
-                        stagingRegistry.Remove(stagingLookupKey);
-
-                        foreach (var outlier in structuralOutliers)
-                        {
-                            foundOutliersCount++;
-                            double predDist = 0;
-
-                            // Apply the same star/fixed-body logic check during the staging back-check routine
-                            if (!string.IsNullOrEmpty(msg.StarType) || verifiedAnchor.OrbitalPeriod <= 0)
-                            {
-                                predDist = verifiedAnchor.AnchorDistance;
-                            }
-                            else
-                            {
-                                predDist = KeplerOrbitSolver.PredictDistanceAtTimestamp(
-                                    verifiedAnchor.SemiMajorAxis, verifiedAnchor.Eccentricity, verifiedAnchor.OrbitalPeriod,
-                                    verifiedAnchor.AnchorTimestamp, verifiedAnchor.AnchorDistance, outlier.Timestamp, verifiedAnchor.IsClimbingOutward
-                                );
-                            }
-
-                            long ghostTimeOut = 0;
-                            if (string.IsNullOrEmpty(msg.StarType) && verifiedAnchor.OrbitalPeriod > 0)
-                            {
-                                long? calculatedGhostTimestamp = KeplerOrbitSolver.SolveGhostTimestamp(
-                                    verifiedAnchor.SemiMajorAxis, verifiedAnchor.Eccentricity, verifiedAnchor.OrbitalPeriod,
-                                    verifiedAnchor.AnchorTimestamp, verifiedAnchor.AnchorDistance, outlier.Distance, verifiedAnchor.IsClimbingOutward
-                                );
-                                ghostTimeOut = calculatedGhostTimestamp ?? 0;
-                            }
-
-                            var reconstructedRecord = new EddnScanRecord
-                            {
-                                Header = new EddnHeader { SoftwareName = outlier.SoftwareName, UploaderId = outlier.UploaderId },
-                                Message = new ScanMessage
-                                {
-                                    StarSystem = msg.StarSystem,
-                                    BodyName = msg.BodyName,
-                                    BodyId = msg.BodyId,
-                                    Timestamp = DateTimeOffset.FromUnixTimeSeconds(outlier.Timestamp).DateTime,
-                                    DistanceFromArrivalLS = outlier.Distance
-                                }
-                            };
-
-                            LogAnomalyToFile(basePlanetKey, reconstructedRecord, predDist, verifiedAnchor.AnchorTimestamp, ghostTimeOut);
-                        }
-                    }
-                    else
-                    {
-                        stagingRegistry.Remove(stagingLookupKey);
-                    }
-                }
+               //Ignore for now
             }
         }
-
 
         private void LogAnomalyToFile(string registryKey, EddnScanRecord record, double expectedDistance, long previousValidTimestamp, long ghostTimestamp)
         {
@@ -1005,9 +815,6 @@ namespace ED_TimeSlide
                            .ToList();
         }
 
-
-
-
         private void btnSelectWebCache_Click(object sender, EventArgs e)
         {
             if (folderBrowserDialogCache.ShowDialog() == DialogResult.OK)
@@ -1029,6 +836,5 @@ namespace ED_TimeSlide
             }
             return null;
         }
-
     }
 }

@@ -29,6 +29,7 @@
         private void InitializeComponent()
         {
             this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.progressBarFiles = new System.Windows.Forms.ProgressBar();
             this.lblSkippedSystemsCounter = new System.Windows.Forms.TextBox();
             this.label1 = new System.Windows.Forms.Label();
             this.rtbLog = new System.Windows.Forms.RichTextBox();
@@ -36,7 +37,6 @@
             this.txtFolderPath = new System.Windows.Forms.TextBox();
             this.btnSelectFolder = new System.Windows.Forms.Button();
             this.btnStartAnalysis = new System.Windows.Forms.Button();
-            this.progressBarFiles = new System.Windows.Forms.ProgressBar();
             this.groupBox2.SuspendLayout();
             this.groupBox1.SuspendLayout();
             this.SuspendLayout();
@@ -56,6 +56,15 @@
             this.groupBox2.TabIndex = 9;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "Output";
+            // 
+            // progressBarFiles
+            // 
+            this.progressBarFiles.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.progressBarFiles.Location = new System.Drawing.Point(6, 19);
+            this.progressBarFiles.Name = "progressBarFiles";
+            this.progressBarFiles.Size = new System.Drawing.Size(747, 23);
+            this.progressBarFiles.TabIndex = 7;
             // 
             // lblSkippedSystemsCounter
             // 
@@ -118,6 +127,7 @@
             this.btnSelectFolder.TabIndex = 0;
             this.btnSelectFolder.Text = "Select Scan Folder...";
             this.btnSelectFolder.UseVisualStyleBackColor = true;
+            this.btnSelectFolder.Click += new System.EventHandler(this.BtnSelectFolder_Click);
             // 
             // btnStartAnalysis
             // 
@@ -130,15 +140,7 @@
             this.btnStartAnalysis.TabIndex = 7;
             this.btnStartAnalysis.Text = "Populate Orbit Registry and Barycenter Coordinate Registry";
             this.btnStartAnalysis.UseVisualStyleBackColor = true;
-            // 
-            // progressBarFiles
-            // 
-            this.progressBarFiles.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.progressBarFiles.Location = new System.Drawing.Point(6, 19);
-            this.progressBarFiles.Name = "progressBarFiles";
-            this.progressBarFiles.Size = new System.Drawing.Size(747, 23);
-            this.progressBarFiles.TabIndex = 7;
+            this.btnStartAnalysis.Click += new System.EventHandler(this.BtnStartAnalysis_Click);
             // 
             // FormRegistryEngine
             // 

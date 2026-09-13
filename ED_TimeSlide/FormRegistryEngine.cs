@@ -1,27 +1,41 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using Newtonsoft.Json;
 
 namespace ED_TimeSlide
 {
     public partial class FormRegistryEngine : Form
     {
+        // V1_06 Core Data Models
+        private Dictionary<string, MasterOrbitAnchor> masterRegistry =
+            new Dictionary<string, MasterOrbitAnchor>();
+        private Dictionary<string, StagingOrbitBlock> stagingRegistry =
+            new Dictionary<string, StagingOrbitBlock>();
+
+        // System Path Identifiers
+        private readonly string masterRegistryPath =
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MasterOrbitRegistry.json");
+        private readonly string stagingRegistryPath =
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "StagingOrbitRegistry.json");
+        private readonly string errorLogPath =
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SystemInitialization_Errors.txt");
+
+        // Operational Metric Counters
         private int skippedSystemsCount = 0;
+        private int processedLinesCount = 0;
         private string currentArchiveName = "";
 
-        // V1_06 Structural Registries
-        private Dictionary<string, MasterOrbitAnchor> masterRegistry = new Dictionary<string, MasterOrbitAnchor>();
-        private Dictionary<string, List<StagedPoint>> stellarLedgerPool = new Dictionary<string, List<StagedPoint>>();
-        private Dictionary<string, StagingOrbitBlock> planetaryStagingCache = new Dictionary<string, StagingOrbitBlock>();
-
-        private readonly string masterRegistryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MasterOrbitRegistry.json");
-        private readonly string errorLogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SystemInitialization_Errors.txt");
+        // Fixed Engine Safety Gates
+        private const double MaxAllowedErrorPercent = 5.0;
+        private const double MaxStellarVarianceLs = 25.0;
+        private const double MinStellarDistanceForStars = 50000.0;
+        private readonly string winRarExePath = @"C:\Program Files\WinRAR\Rar.exe";
 
         private BackgroundWorker preprocessingWorker;
 
@@ -29,16 +43,21 @@ namespace ED_TimeSlide
         {
             InitializeComponent();
             InitializePreprocessingWorker();
+            LoadExistingRegistries();
 
-            // Wire up UI interactions to designer elements safely
-            btnSelectFolder.Click += BtnSelectFolder_Click;
-            btnStartAnalysis.Click += BtnStartAnalysis_Click;
+            //testing setup of ease
+            txtFolderPath.Text = @"E:\Elite Dangerous\EDDN data\Raw Data\Scan\Test";
+            btnStartAnalysis.Enabled = true;
         }
 
         private void InitializePreprocessingWorker()
         {
-            preprocessingWorker = new BackgroundWorker();
-            preprocessingWorker.WorkerReportsProgress = true;
+            preprocessingWorker = new BackgroundWorker
+            {
+                WorkerReportsProgress = true,
+                WorkerSupportsCancellation = false
+            };
+
             preprocessingWorker.DoWork += PreprocessingWorker_DoWork;
             preprocessingWorker.ProgressChanged += PreprocessingWorker_ProgressChanged;
             preprocessingWorker.RunWorkerCompleted += PreprocessingWorker_RunWorkerCompleted;
@@ -52,7 +71,7 @@ namespace ED_TimeSlide
                 {
                     txtFolderPath.Text = fbd.SelectedPath;
                     btnStartAnalysis.Enabled = true;
-                    UpdateLogDisplay($"Selected Target Archive Folder: {fbd.SelectedPath}");
+                    UpdateLogDisplay($"Selected Target: {fbd.SelectedPath}");
                 }
             }
         }
@@ -62,12 +81,14 @@ namespace ED_TimeSlide
             btnStartAnalysis.Enabled = false;
             btnSelectFolder.Enabled = false;
             skippedSystemsCount = 0;
+            processedLinesCount = 0;
             lblSkippedSystemsCounter.Text = "0";
+            progressBarFiles.Value = 0;
 
             if (File.Exists(errorLogPath)) File.Delete(errorLogPath);
 
             string targetFolder = txtFolderPath.Text;
-            UpdateLogDisplay("Initializing Chronological Preprocessing Pass (Phase 1)...");
+            UpdateLogDisplay("Initializing Chronological Preprocessing...");
             preprocessingWorker.RunWorkerAsync(targetFolder);
         }
 
@@ -76,16 +97,15 @@ namespace ED_TimeSlide
             string folderPath = (string)e.Argument;
             BackgroundWorker worker = sender as BackgroundWorker;
 
-            // Fetch files and enforce V1_06 Option A: Strict Calendar Ingestion Ordering
             var allFiles = Directory.GetFiles(folderPath, "*.*")
                 .Where(f => f.EndsWith(".rar") || f.EndsWith(".bz2") || f.EndsWith(".jsonl"))
                 .Select(f => new { Path = f, Date = ExtractDateFromFilename(Path.GetFileName(f)) })
-                .OrderBy(f => f.Date) // Enforces timeline-first learning tracks
+                .OrderBy(f => f.Date)
                 .ToList();
 
             if (allFiles.Count == 0)
             {
-                worker.ReportProgress(0, "Error: No valid log archives (.rar, .bz2, .jsonl) discovered.");
+                worker.ReportProgress(0, "Error: No valid log archives discovered.");
                 return;
             }
 
@@ -96,50 +116,80 @@ namespace ED_TimeSlide
                 currentArchiveName = Path.GetFileName(file.Path);
                 int percentage = (int)(((double)(i + 1) / totalFiles) * 100);
 
-                worker.ReportProgress(percentage, $"Ingesting Chronologically [{i + 1}/{totalFiles}]: {currentArchiveName}");
+                worker.ReportProgress(percentage, $"Ingesting [{i + 1}/{totalFiles}]: {currentArchiveName}");
 
-                // File streaming routing goes here (Rar/Bz2 extractors connect natively to Pass 1 routing parsing)
-                ParseHistoricalFileTimeline(file.Path);
+                if (file.Path.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReadJsonlFileNative(file.Path);
+                }
+                else
+                {
+                    StreamCompressedArchive(file.Path, file.Path.EndsWith(".bz2", StringComparison.OrdinalIgnoreCase));
+                }
             }
+
+            e.Result = $"Initialization Complete. Swept {processedLinesCount} log entries.";
         }
 
-        private void ParseHistoricalFileTimeline(string filePath)
+        private void EvaluateAndRouteLine(string textLine)
         {
-            // Placeholder wrapper mirroring original text loops, routing tokens natively to Pass1 planetary rules
-            // Individual line items parse through IngestRecordPass1()
+            if (string.IsNullOrWhiteSpace(textLine)) return;
+            if (!textLine.Contains("\"event\":\"Scan\"") && !textLine.Contains("\"event\": \"Scan\"")) return;
+
+            try
+            {
+                var record = JsonConvert.DeserializeObject<EddnScanRecord>(textLine);
+                if (record?.Message != null && record.Message.EventName == "Scan")
+                {
+                    EvaluateRecordAgainstStagingRegistry(record);
+                }
+            }
+            catch (JsonException) { }
         }
 
-        private void IngestRecordPass1(EddnScanRecord record)
+        private void EvaluateRecordAgainstStagingRegistry(EddnScanRecord record)
         {
             var msg = record.Message;
-            string bodyKey = $"{msg.SystemAddress}_{msg.BodyId}"; // V1_06 Composite Numeric Keying
 
-            // Rule 1: Isolate Secondary Stars for the Time-Bucket Ingestion Ledger
-            if (!string.IsNullOrEmpty(msg.StarType))
+            // Ignore primary suns
+            if (msg.BodyId == 0) return;
+
+            // Ignore belt and ring clusters, as they are not valid orbital bodies
+            if (msg.BodyName.Contains("Belt Cluster") || msg.BodyName.Contains("Ring Cluster")) return;
+
+            // DISTANCE GATE FILTER: Turn off secondary star noise and distant binary sun sets instantly.
+            // If the body sits further than 10,000 LS out, it's a deep system outlier. We drop it.
+            if (msg.StarType != null && msg.DistanceFromArrivalLS <= MinStellarDistanceForStars) return;
+
+            string basePlanetKey = $"{msg.SystemAddress}_{msg.BodyId}";
+            long currentTimestampSeconds = msg.Timestamp.ToUnixSeconds();
+            double currentDistance = msg.DistanceFromArrivalLS;
+
+            if (masterRegistry.ContainsKey(basePlanetKey)) return;
+
+            string uploaderId = record.Header?.UploaderId ?? "Anonymous";
+            string stagingLookupKey = $"{basePlanetKey}_{uploaderId}";
+
+            if (!string.IsNullOrEmpty(msg.StarType) || msg.OrbitalPeriod <= 0)
             {
-                string systemKey = msg.SystemAddress.ToString();
-                if (!stellarLedgerPool.ContainsKey(systemKey))
+                var starAnchor = new MasterOrbitAnchor
                 {
-                    stellarLedgerPool[systemKey] = new List<StagedPoint>();
-                }
+                    SemiMajorAxis = msg.SemiMajorAxis,
+                    Eccentricity = msg.Eccentricity,
+                    OrbitalPeriod = msg.OrbitalPeriod,
+                    AnchorTimestamp = currentTimestampSeconds,
+                    AnchorDistance = currentDistance,
+                    VerifiedSourceFile = currentArchiveName,
+                    SoftwareName = record.Header?.SoftwareName ?? "UnknownTool",
+                    IsClimbingOutward = false,
+                    LastCheckedTimestamp = currentTimestampSeconds
+                };
 
-                if (stellarLedgerPool[systemKey].Count < 20) // Cap ledger pool strictly at 20 slots
-                {
-                    stellarLedgerPool[systemKey].Add(new StagedPoint
-                    {
-                        Timestamp = msg.Timestamp.ToUnixSeconds(),
-                        Distance = msg.DistanceFromArrivalLS,
-                        SourceFile = currentArchiveName,
-                        SoftwareName = record.Header?.SoftwareName ?? "Unknown"
-                    });
-                }
+                masterRegistry[basePlanetKey] = starAnchor;
                 return;
             }
 
-            // Rule 2: Route Planetary Logs through the 4-out-of-5 Consensus Graduation Buffer
-            if (masterRegistry.ContainsKey(bodyKey)) return; // Bypasses if already locked in
-
-            if (!planetaryStagingCache.TryGetValue(bodyKey, out StagingOrbitBlock stagingBlock))
+            if (!stagingRegistry.TryGetValue(stagingLookupKey, out StagingOrbitBlock stagingBlock))
             {
                 stagingBlock = new StagingOrbitBlock
                 {
@@ -147,43 +197,147 @@ namespace ED_TimeSlide
                     Eccentricity = msg.Eccentricity,
                     OrbitalPeriod = msg.OrbitalPeriod
                 };
-                planetaryStagingCache[bodyKey] = stagingBlock;
+                stagingRegistry[stagingLookupKey] = stagingBlock;
             }
 
             stagingBlock.CollectedPoints.Add(new StagedPoint
             {
-                Timestamp = msg.Timestamp.ToUnixSeconds(),
-                Distance = msg.DistanceFromArrivalLS,
+                Timestamp = currentTimestampSeconds,
+                Distance = currentDistance,
                 SourceFile = currentArchiveName,
-                SoftwareName = record.Header?.SoftwareName ?? "Unknown"
+                SoftwareName = record.Header?.SoftwareName ?? "UnknownTool",
+                UploaderId = uploaderId
             });
 
             if (stagingBlock.CollectedPoints.Count == 5)
             {
-                EvaluatePlanetaryGraduation(bodyKey, stagingBlock);
+                if (TryValidateStagingCluster(stagingBlock, out MasterOrbitAnchor verifiedAnchor, out _))
+                {
+                    verifiedAnchor.LastCheckedTimestamp = verifiedAnchor.AnchorTimestamp;
+                    masterRegistry[basePlanetKey] = verifiedAnchor;
+                }
+                else
+                {
+                    IncrementSkippedSystemsDiagnostics(basePlanetKey, "PLANETARY_CONSENSUS_FAILED");
+                }
+                stagingRegistry.Remove(stagingLookupKey);
             }
         }
 
-        private void EvaluatePlanetaryGraduation(string bodyKey, StagingOrbitBlock block)
+        private bool TryValidateStagingCluster(StagingOrbitBlock stagingBlock, out MasterOrbitAnchor verifiedAnchor, out List<StagedPoint> structuralOutliers)
         {
-            // Implements the strict 4-out-of-5 baseline consensus validation check
-            bool graduated = false;
+            verifiedAnchor = null;
+            structuralOutliers = new List<StagedPoint>();
 
-            // Loop logic parses matches against KeplerOrbitSolver models...
-            // If valid: masterRegistry[bodyKey] = verifiedAnchor
+            var firstPt = stagingBlock.CollectedPoints[0];
+            var lastPt = stagingBlock.CollectedPoints[stagingBlock.CollectedPoints.Count - 1];
 
-            if (!graduated)
+            bool dynamicIsClimbing = lastPt.Distance >= firstPt.Distance;
+            bool isStellarBody = stagingBlock.OrbitalPeriod <= 0;
+
+            for (int anchorIndex = 0; anchorIndex < stagingBlock.CollectedPoints.Count; anchorIndex++)
             {
-                IncrementSkippedSystemsDiagnostics(bodyKey, "PLANETARY_CONSENSUS_FAILED");
+                var candidateAnchor = stagingBlock.CollectedPoints[anchorIndex];
+                int agreementCount = 0;
+                var localOutliers = new List<StagedPoint>();
+
+                for (int checkIndex = 0; checkIndex < stagingBlock.CollectedPoints.Count; checkIndex++)
+                {
+                    if (anchorIndex == checkIndex)
+                    {
+                        agreementCount++;
+                        continue;
+                    }
+
+                    var pointToCheck = stagingBlock.CollectedPoints[checkIndex];
+                    bool pointMatchesBaseline = false;
+
+                    if (isStellarBody)
+                    {
+                        double stellarVariance = Math.Abs(pointToCheck.Distance - candidateAnchor.Distance);
+                        if (stellarVariance <= MaxStellarVarianceLs) pointMatchesBaseline = true;
+                    }
+                    else
+                    {
+                        double predictedDistance = KeplerOrbitSolver.PredictDistanceAtTimestamp(
+                            stagingBlock.SemiMajorAxis, stagingBlock.Eccentricity, stagingBlock.OrbitalPeriod,
+                            candidateAnchor.Timestamp, candidateAnchor.Distance, pointToCheck.Timestamp, dynamicIsClimbing
+                        );
+
+                        double variance = Math.Abs(pointToCheck.Distance - predictedDistance);
+                        double errorPercentage = predictedDistance > 0 ? (variance / predictedDistance) * 100.0 : 0;
+
+                        if (errorPercentage <= MaxAllowedErrorPercent) pointMatchesBaseline = true;
+                    }
+
+                    if (pointMatchesBaseline) agreementCount++;
+                    else localOutliers.Add(pointToCheck);
+                }
+
+                if (agreementCount >= 4)
+                {
+                    verifiedAnchor = new MasterOrbitAnchor
+                    {
+                        SemiMajorAxis = stagingBlock.SemiMajorAxis,
+                        Eccentricity = stagingBlock.Eccentricity,
+                        OrbitalPeriod = stagingBlock.OrbitalPeriod,
+                        AnchorTimestamp = candidateAnchor.Timestamp,
+                        AnchorDistance = candidateAnchor.Distance,
+                        VerifiedSourceFile = candidateAnchor.SourceFile,
+                        SoftwareName = candidateAnchor.SoftwareName,
+                        IsClimbingOutward = !isStellarBody && dynamicIsClimbing
+                    };
+                    structuralOutliers = localOutliers;
+                    return true;
+                }
             }
-            planetaryStagingCache.Remove(bodyKey); // Instantly purges cache slot to freeze leaks
+            return false;
+        }
+
+        private void SaveRegistriesToDisk()
+        {
+            try
+            {
+                using (StreamWriter sw = new StreamWriter(masterRegistryPath, false))
+                using (JsonTextWriter jw = new JsonTextWriter(sw))
+                {
+                    JsonSerializer serializer = new JsonSerializer { Formatting = Formatting.None };
+                    serializer.Serialize(jw, masterRegistry);
+                }
+
+                using (StreamWriter sw = new StreamWriter(stagingRegistryPath, false))
+                using (JsonTextWriter jw = new JsonTextWriter(sw))
+                {
+                    JsonSerializer serializer = new JsonSerializer { Formatting = Formatting.None };
+                    serializer.Serialize(jw, stagingRegistry);
+                }
+            }
+            catch (Exception ex)
+            {
+                UpdateLogDisplay($"[ERROR] Serialization crash: {ex.Message}");
+            }
+        }
+
+        private void LoadExistingRegistries()
+        {
+            if (File.Exists(masterRegistryPath))
+            {
+                string json = File.ReadAllText(masterRegistryPath);
+                masterRegistry = JsonConvert.DeserializeObject<Dictionary<string, MasterOrbitAnchor>>(json)
+                                 ?? new Dictionary<string, MasterOrbitAnchor>();
+            }
+            if (File.Exists(stagingRegistryPath))
+            {
+                string json = File.ReadAllText(stagingRegistryPath);
+                stagingRegistry = JsonConvert.DeserializeObject<Dictionary<string, StagingOrbitBlock>>(json)
+                                  ?? new Dictionary<string, StagingOrbitBlock>();
+            }
         }
 
         private void IncrementSkippedSystemsDiagnostics(string identifier, string failureCode)
         {
             skippedSystemsCount++;
 
-            // Thread-safe update to the lightweight counter box (Option 2 UI Architecture)
             if (lblSkippedSystemsCounter.InvokeRequired)
             {
                 lblSkippedSystemsCounter.Invoke(new Action(() => lblSkippedSystemsCounter.Text = skippedSystemsCount.ToString()));
@@ -193,10 +347,53 @@ namespace ED_TimeSlide
                 lblSkippedSystemsCounter.Text = skippedSystemsCount.ToString();
             }
 
-            // Append textual details silently to background audit log
             lock (masterRegistryPath)
             {
                 File.AppendAllText(errorLogPath, $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} | Anchor: {identifier} | Failure: {failureCode}{Environment.NewLine}");
+            }
+        }
+
+        private void StreamCompressedArchive(string path, bool isBz2)
+        {
+            string args = isBz2 ? $"e -so -inul \"{path}\"" : $"p -inul \"{path}\"";
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = winRarExePath,
+                Arguments = args,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true
+            };
+
+            try
+            {
+                using (Process process = Process.Start(startInfo))
+                {
+                    using (StreamReader reader = process.StandardOutput)
+                    {
+                        string line;
+                        while ((line = reader.ReadLine()) != null)
+                        {
+                            processedLinesCount++;
+                            EvaluateAndRouteLine(line);
+                        }
+                    }
+                    process.WaitForExit();
+                }
+            }
+            catch { }
+        }
+
+        private void ReadJsonlFileNative(string path)
+        {
+            using (StreamReader reader = new StreamReader(path))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    processedLinesCount++;
+                    EvaluateAndRouteLine(line);
+                }
             }
         }
 
@@ -208,10 +405,10 @@ namespace ED_TimeSlide
 
         private void PreprocessingWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-            UpdateLogDisplay($"Pass 1 Complete. Systems Flagged for Barycentric Consensus: {stellarLedgerPool.Count}");
-            UpdateLogDisplay("Beginning Pass 2: Executing 3D RANSAC Triangulation Loops...");
+            SaveRegistriesToDisk();
+            if (e.Result != null) UpdateLogDisplay(e.Result.ToString());
+            UpdateLogDisplay("Pass 1 Calibration Complete. Tables baked securely to disk.");
 
-            // Next structural code block fires here
             btnSelectFolder.Enabled = true;
             btnStartAnalysis.Enabled = true;
         }
@@ -232,7 +429,8 @@ namespace ED_TimeSlide
 
         private string ExtractDateFromFilename(string filename)
         {
-            var match = Regex.Match(filename, @"\d{4}-\d{2}-\d{2}"); return match.Success ? match.Value : "9999-12-31";
+            var match = Regex.Match(filename, @"\d{4}-\d{2}-\d{2}");
+            return match.Success ? match.Value : "9999-12-31";
         }
     }
 }
