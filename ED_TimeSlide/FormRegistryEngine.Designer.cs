@@ -29,13 +29,14 @@
         private void InitializeComponent()
         {
             this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.lblSkippedSystemsCounter = new System.Windows.Forms.TextBox();
+            this.label1 = new System.Windows.Forms.Label();
             this.rtbLog = new System.Windows.Forms.RichTextBox();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.txtFolderPath = new System.Windows.Forms.TextBox();
             this.btnSelectFolder = new System.Windows.Forms.Button();
             this.btnStartAnalysis = new System.Windows.Forms.Button();
-            this.label1 = new System.Windows.Forms.Label();
-            this.lblSkippedSystemsCounter = new System.Windows.Forms.TextBox();
+            this.progressBarFiles = new System.Windows.Forms.ProgressBar();
             this.groupBox2.SuspendLayout();
             this.groupBox1.SuspendLayout();
             this.SuspendLayout();
@@ -45,6 +46,7 @@
             this.groupBox2.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
+            this.groupBox2.Controls.Add(this.progressBarFiles);
             this.groupBox2.Controls.Add(this.lblSkippedSystemsCounter);
             this.groupBox2.Controls.Add(this.label1);
             this.groupBox2.Controls.Add(this.rtbLog);
@@ -55,14 +57,32 @@
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "Output";
             // 
+            // lblSkippedSystemsCounter
+            // 
+            this.lblSkippedSystemsCounter.Location = new System.Drawing.Point(184, 48);
+            this.lblSkippedSystemsCounter.Name = "lblSkippedSystemsCounter";
+            this.lblSkippedSystemsCounter.Size = new System.Drawing.Size(100, 20);
+            this.lblSkippedSystemsCounter.TabIndex = 6;
+            this.lblSkippedSystemsCounter.Text = "0";
+            this.lblSkippedSystemsCounter.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.Location = new System.Drawing.Point(3, 51);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(128, 13);
+            this.label1.TabIndex = 5;
+            this.label1.Text = "Skipped Systems Counter";
+            // 
             // rtbLog
             // 
             this.rtbLog.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.rtbLog.Location = new System.Drawing.Point(6, 48);
+            this.rtbLog.Location = new System.Drawing.Point(6, 74);
             this.rtbLog.Name = "rtbLog";
-            this.rtbLog.Size = new System.Drawing.Size(747, 397);
+            this.rtbLog.Size = new System.Drawing.Size(747, 371);
             this.rtbLog.TabIndex = 4;
             this.rtbLog.Text = "";
             // 
@@ -111,23 +131,14 @@
             this.btnStartAnalysis.Text = "Populate Orbit Registry and Barycenter Coordinate Registry";
             this.btnStartAnalysis.UseVisualStyleBackColor = true;
             // 
-            // label1
+            // progressBarFiles
             // 
-            this.label1.AutoSize = true;
-            this.label1.Location = new System.Drawing.Point(6, 20);
-            this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(128, 13);
-            this.label1.TabIndex = 5;
-            this.label1.Text = "Skipped Systems Counter";
-            // 
-            // lblSkippedSystemsCounter
-            // 
-            this.lblSkippedSystemsCounter.Location = new System.Drawing.Point(140, 17);
-            this.lblSkippedSystemsCounter.Name = "lblSkippedSystemsCounter";
-            this.lblSkippedSystemsCounter.Size = new System.Drawing.Size(100, 20);
-            this.lblSkippedSystemsCounter.TabIndex = 6;
-            this.lblSkippedSystemsCounter.Text = "0";
-            this.lblSkippedSystemsCounter.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.progressBarFiles.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.progressBarFiles.Location = new System.Drawing.Point(6, 19);
+            this.progressBarFiles.Name = "progressBarFiles";
+            this.progressBarFiles.Size = new System.Drawing.Size(747, 23);
+            this.progressBarFiles.TabIndex = 7;
             // 
             // FormRegistryEngine
             // 
@@ -157,5 +168,6 @@
         private System.Windows.Forms.Button btnStartAnalysis;
         private System.Windows.Forms.TextBox lblSkippedSystemsCounter;
         private System.Windows.Forms.Label label1;
+        private System.Windows.Forms.ProgressBar progressBarFiles;
     }
 }

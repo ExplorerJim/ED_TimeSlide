@@ -36,6 +36,7 @@ namespace ED_TimeSlide
         frm_Process1 inst_Process1;
         frm_Journey_Tracker inst_Journey_Tracker;
         FormTimeSlipAnalysis inst_FormTimeSlipAnalysis;
+        FormRegistryEngine inst_FormRegistryEngine;
         #endregion
 
         public MDIMain()
@@ -46,8 +47,9 @@ namespace ED_TimeSlide
 
             //Load_Form_Instance(inst_Process1);
             //Load_Form_Instance(inst_Journey_Tracker);
-            
-            Load_Form_Instance(inst_FormTimeSlipAnalysis);
+
+            //Load_Form_Instance(inst_FormTimeSlipAnalysis);
+            Load_Form_Instance(inst_FormRegistryEngine);
         }
         #region Tool Strip
         private void form1ToolStripMenuItem1_Click(object sender, EventArgs e)
@@ -76,6 +78,10 @@ namespace ED_TimeSlide
 
             Load_Form_Instance(inst_FormTimeSlipAnalysis);
         }
+        private void registryEngineToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            Load_Form_Instance(inst_FormRegistryEngine);
+        }
         #endregion
         #region Private Functions
         private void Load_Variables()
@@ -91,6 +97,9 @@ namespace ED_TimeSlide
 
             inst_FormTimeSlipAnalysis = new FormTimeSlipAnalysis();
             inst_FormTimeSlipAnalysis.MdiParent = this;
+
+            inst_FormRegistryEngine = new FormRegistryEngine();
+            inst_FormRegistryEngine.MdiParent = this;
         }
         #region Private Functions - Load Forms
         private void Load_Form_Instance(Form form)
@@ -105,6 +114,9 @@ namespace ED_TimeSlide
             }
         }
         #endregion
+
         #endregion
+
+
     }
 }
