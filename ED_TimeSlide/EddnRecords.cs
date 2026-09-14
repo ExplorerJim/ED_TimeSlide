@@ -3,8 +3,8 @@ using Newtonsoft.Json;
 
 namespace ED_TimeSlide
 {
-    // The top-level schema wrapper
-    public class EddnScanRecord
+    #region Structures
+    public class EddnRecords
     {
         [JsonProperty("header")]
         public EddnHeader Header { get; set; }
@@ -42,7 +42,6 @@ namespace ED_TimeSlide
         [JsonProperty("ScanType")]
         public string ScanType { get; set; }
 
-        // Core continuous orbital parameters for the physics tracker
         [JsonProperty("DistanceFromArrivalLS")]
         public double DistanceFromArrivalLS { get; set; }
 
@@ -61,4 +60,5 @@ namespace ED_TimeSlide
         [JsonProperty("SystemAddress")]
         public long SystemAddress { get; set; }
     }
+    #endregion
 }

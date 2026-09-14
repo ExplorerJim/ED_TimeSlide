@@ -15,28 +15,25 @@ namespace ED_TimeSlide
 {
     public partial class FormTimeSlipAnalysis : Form
     {
-        private readonly string winRarExePath = @"C:\Program Files\WinRAR\Rar.exe";
+        #region Variables
         private int processedLinesCount = 0;
         private int foundOutliersCount = 0;
-        private const double MaxAllowedErrorPercent = 5.0; // Maximum allowed error percentage for validation
-        private const double MaxStellarVarianceLs = 25.0; // Maximum allowed variance in Light Seconds for stellar bodies
-        private const double MinStellarDistanceForStars = 50000.0; // Minimum allowed distance in Light Seconds for stars
 
-        // ─── REGISTRY DATA STORES ───
-        // Key format string: "StarSystemName_BodyID" (e.g., "Gondul_2")
+        // ─── REGISTRY DATA STORES ───, Key format string: "StarSystemName_BodyID" (e.g., "Gondul_2")
         private Dictionary<string, MasterOrbitAnchor> masterRegistry = new Dictionary<string, MasterOrbitAnchor>();
         private Dictionary<string, StagingOrbitBlock> stagingRegistry = new Dictionary<string, StagingOrbitBlock>();
 
         // Storage paths for the local registry state
-        private readonly string masterRegistryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MasterOrbitRegistry.json");
+        private readonly string masterRegistryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Settings.MasterOrbitRegistryFileName);
 
         // Tracking variable to log which file is actively being scraped
         private string currentArchiveName = "";
 
         private readonly object fileLock = new object();
-        private readonly string anomaliesReportPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DetectedAnomalies.json");
+        private readonly string anomaliesReportPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Settings.AnomaliesReportFileName);
 
         private BackgroundWorker analysisWorker;
+        #endregion
 
         public FormTimeSlipAnalysis()
         {
@@ -49,79 +46,111 @@ namespace ED_TimeSlide
             txtWebCachePath.Text = @"E:\Elite Dangerous\EDDN data\Raw Data\Other";
         }
 
-        private void InitializeBackgroundWorker()
+        #region Form Events
+        private void FormTimeSlipAnalysis_Load(object sender, EventArgs e)
         {
-            analysisWorker = new BackgroundWorker();
-            analysisWorker.WorkerReportsProgress = true;
-            analysisWorker.DoWork += AnalysisWorker_DoWork;
-            analysisWorker.ProgressChanged += AnalysisWorker_ProgressChanged;
-            analysisWorker.RunWorkerCompleted += AnalysisWorker_RunWorkerCompleted;
+            LoadRegistriesFromDisk();
         }
-
         private void btnSelectFolder_Click(object sender, EventArgs e)
         {
+            #region Folder Browser Dialog setup
             if (folderBrowserDialogScan.ShowDialog() == DialogResult.OK)
             {
                 txtFolderPath.Text = folderBrowserDialogScan.SelectedPath;
                 btnStartAnalysis.Enabled = true;
                 LogMessage($"Selected folder: {folderBrowserDialogScan.SelectedPath}");
             }
+            #endregion
         }
-
         private void btnStartAnalysis_Click(object sender, EventArgs e)
         {
+            #region UI State Updates
             btnStartAnalysis.Enabled = false;
             btnSelectFolder.Enabled = false;
             progressBarFiles.Value = 0;
-
+            #endregion
+            #region Capture the target folder path for processing
             string targetFolder = txtFolderPath.Text;
             LogMessage("Starting Single-Pass Ingestion Loop...");
-
-            // Runs Phase 1 on a background thread so the MDI UI doesn't lock up
+            #endregion
+            #region Runs Phase 1 on a background thread so the MDI UI doesn't lock up
             analysisWorker.RunWorkerAsync(targetFolder);
+            #endregion
         }
+        private void btnSelectWebCache_Click(object sender, EventArgs e)
+        {
+            #region Folder Browser Dialog setup
+            if (folderBrowserDialogCache.ShowDialog() == DialogResult.OK)
+            {
+                txtWebCachePath.Text = folderBrowserDialogCache.SelectedPath;
 
-        /// <summary>
-        /// Entry point for the background thread execution loop.
-        /// </summary>
+                // Optional: Save this path to Properties.Settings.Default so it remembers next time
+                LogMessage($"Web Cache set to: {txtWebCachePath.Text}");
+            }
+            #endregion
+        }
+        #endregion
+
+        #region Background Worker Functions
+        private void InitializeBackgroundWorker()
+        {
+            #region Background Worker Setup
+            analysisWorker = new BackgroundWorker();
+            analysisWorker.WorkerReportsProgress = true;
+            analysisWorker.DoWork += AnalysisWorker_DoWork;
+            analysisWorker.ProgressChanged += AnalysisWorker_ProgressChanged;
+            analysisWorker.RunWorkerCompleted += AnalysisWorker_RunWorkerCompleted;
+            #endregion
+        }
         private void AnalysisWorker_DoWork(object sender, DoWorkEventArgs e)
         {
+            #region Function Variables
             string folderPath = (string)e.Argument;
             BackgroundWorker worker = sender as BackgroundWorker;
+            #endregion
 
+            #region Reset counters for this run
             processedLinesCount = 0;
             foundOutliersCount = 0;
-
-            // Fetch file targets for all required extensions
+            #endregion
+            
+            #region Fetch file targets for all required extensions
             string[] rarFiles = Directory.GetFiles(folderPath, "*.rar");
             string[] bz2Files = Directory.GetFiles(folderPath, "*.bz2");
             string[] jsonlFiles = Directory.GetFiles(folderPath, "*.jsonl");
-
             int totalFiles = rarFiles.Length + bz2Files.Length + jsonlFiles.Length;
+            #endregion
 
+            #region Check if any files were found, return if not
             if (totalFiles == 0)
             {
                 worker.ReportProgress(0, "Error: No .rar, .bz2, or .jsonl files found in the target directory.");
                 return;
             }
+            #endregion
 
-            // Report dynamic file metrics to the UI Log Console
+            #region Report dynamic file metrics to the UI Log Console
             worker.ReportProgress(0, $"Found {rarFiles.Length} .rar archive(s).");
             worker.ReportProgress(0, $"Found {bz2Files.Length} .bz2 archive(s).");
             worker.ReportProgress(0, $"Found {jsonlFiles.Length} extracted .jsonl file(s).");
             worker.ReportProgress(0, $"--------------------------------------------------");
+            #endregion
 
-            if ((rarFiles.Length > 0 || bz2Files.Length > 0) && !File.Exists(winRarExePath))
+            #region Check for WinRAR engine presence if needed and avalible, return if not
+            if ((rarFiles.Length > 0 || bz2Files.Length > 0) && !File.Exists(Settings.winRarExePath))
             {
                 worker.ReportProgress(0, "Error: WinRAR engine not found at default location.");
                 return;
             }
+            #endregion
 
+            #region Reset counters for this run
             processedLinesCount = 0;
             foundOutliersCount = 0;
             int currentFileIndex = 0;
-
-            // 1. Process standard .rar files
+            #endregion
+            
+            #region 1. Process standard .rar files
             foreach (string file in rarFiles)
             {
                 int percentage = (int)(((double)++currentFileIndex / totalFiles) * 100);
@@ -129,8 +158,9 @@ namespace ED_TimeSlide
                 worker.ReportProgress(percentage, $"Streaming RAR: {Path.GetFileName(file)}");
                 StreamRarArchive(file, worker, percentage);
             }
-
-            // 2. Process .bz2 web data dumps using the same engine
+            #endregion
+           
+            #region 2. Process .bz2 web data dumps using the same engine
             foreach (string file in bz2Files)
             {
                 int percentage = (int)(((double)++currentFileIndex / totalFiles) * 100);
@@ -138,8 +168,9 @@ namespace ED_TimeSlide
                 worker.ReportProgress(percentage, $"Streaming BZ2: {Path.GetFileName(file)}");
                 StreamBz2Archive(file, worker, percentage);
             }
-
-            // 3. Process extracted uncompressed .jsonl files natively
+            #endregion
+           
+            #region 3. Process extracted uncompressed .jsonl files natively
             foreach (string file in jsonlFiles)
             {
                 int percentage = (int)(((double)++currentFileIndex / totalFiles) * 100);
@@ -147,56 +178,70 @@ namespace ED_TimeSlide
                 worker.ReportProgress(percentage, $"Reading JSONL: {Path.GetFileName(file)}");
                 ReadJsonlLitFile(file);
             }
-
+            #endregion
+           
+            #region Final Reporting
             e.Result = $"Phase 1 Complete. Swept {processedLinesCount} entries. Isolated {foundOutliersCount} timeline anomalies.";
+            #endregion
         }
-        
         private void AnalysisWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
         {
+            #region Update the UI Progress Bar and Log Messages
             progressBarFiles.Value = e.ProgressPercentage;
             if (e.UserState != null)
             {
                 LogMessage(e.UserState.ToString());
             }
+            #endregion
         }
-
         private void AnalysisWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-            // 1. UI & LOGGING UPDATES
+            #region Midway reporting to UI Log Console
             if (e.Result != null) LogMessage(e.Result.ToString());
+            #endregion
 
-            // 2. CHECK FOR ANOMALIES TO PROCESS
+            #region Check the anomalies report file and prepare for Phase 2
             string anomaliesReportPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DetectedAnomalies.json");
             string masterReportOutPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FinalTimeSlipDossier.md");
+            #endregion
 
+            #region If no anomalies were found, log a message and reset the UI state
             if (!File.Exists(anomaliesReportPath))
             {
                 LogMessage("Phase 2 Complete: No anomalies logged to track.");
                 ResetUiState();
                 return;
             }
+            #endregion
 
+            #region Update UI Log Console for Phase 2
             LogMessage("Starting Phase 2: Assembling Commander Flight Paths (Local Scan)...");
+            #endregion
 
-            // 3. PREPARE THE DOSSIER
+            #region Prepare the dossier output file, deleting any existing one to avoid appending to old data
             if (File.Exists(masterReportOutPath)) File.Delete(masterReportOutPath);
 
             string[] anomalyLines = File.ReadAllLines(anomaliesReportPath);
             HashSet<string> processedLookups = new HashSet<string>();
             int dossiersWritten = 0;
+            #endregion
 
-            // Write Header
+            #region Write Header to dossier Markdown file
             File.WriteAllText(masterReportOutPath, $"# 🚀 ELITE DANGEROUS TIME-SLIP INVESTIGATION DOSSIER{Environment.NewLine}");
             File.AppendAllText(masterReportOutPath, $"Generated on: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC{Environment.NewLine}");
             File.AppendAllText(masterReportOutPath, $"Scan Source: Local Files{Environment.NewLine}{Environment.NewLine}---{Environment.NewLine}");
+            #endregion
 
-            // 4. LOOP THROUGH ANOMALIES
+            #region Iterate through each anomaly line
             foreach (string line in anomalyLines)
             {
+                #region Skip empty lines to avoid processing errors
                 if (string.IsNullOrWhiteSpace(line)) continue;
+                #endregion
 
                 try
                 {
+                    #region Deserialize the anomaly JSON line into a dynamic object to extract relevant fields
                     dynamic anomaly = JsonConvert.DeserializeObject(line);
                     string uploaderId = anomaly.UploaderID;
                     DateTime eventTime = anomaly.EventTimestamp;
@@ -205,29 +250,32 @@ namespace ED_TimeSlide
                     string ghostDate = anomaly.GhostDateZulu;
                     double reportedDist = anomaly.ReportedDistance;
                     double expectedDist = anomaly.ExpectedDistance;
-
                     string sourceFile = anomaly.SourceArchive ?? "";
+                    #endregion
 
-                    // 5. DETERMINE TARGET DATE
-                    // Default to Event Date
+                    #region Determine the target search date for local file lookup, defaulting to the event time if no file date is extracted
                     string targetSearchDate = eventTime.ToString("yyyy-MM-dd");
+                    #endregion
 
-                    // Try to override with the File Date (Upload Date) if available
+                    #region Try to override with the File Date (Upload Date) if available
                     string fileDate = ExtractDateFromFilename(sourceFile);
                     if (!string.IsNullOrEmpty(fileDate))
                     {
                         targetSearchDate = fileDate;
                     }
+                    #endregion
 
-                    // Deduplication
+                    #region Check if this uploader/date combination has already been processed to avoid duplicate work
                     string lookupToken = $"{uploaderId}_{targetSearchDate}";
                     if (processedLookups.Contains(lookupToken)) continue;
                     processedLookups.Add(lookupToken);
+                    #endregion
 
-                    LogMessage($"[LOCAL HUNT] Assembling flight path for {uploaderId} in files dated {targetSearchDate}...");
+                    #region Log the assembly of the flight path anomaly for this specific body and date
+                    LogMessage($"[LOCAL HUNT] Assembling flight path anomaly found in {bodyName} in files dated {targetSearchDate}...");
+                    #endregion
 
-                    // 6. CALL THE LOCAL FETCH METHOD
-                    // We pass 'txtFolderPath.Text' to force it to look in your existing scan folder
+                    #region Fetch the commander's journey timeline from local files based on the target date, uploader ID, and specified folders
                     List<JourneyTimelineEvent> journey = FetchCommanderJourneyLocal(
                         targetSearchDate,
                         uploaderId,
@@ -235,39 +283,44 @@ namespace ED_TimeSlide
                         txtWebCachePath.Text,
                         sourceFile
                     );
+                    #endregion
 
+                    #region Increment the dossier counter for each processed anomaly
                     dossiersWritten++;
+                    #endregion
 
-                    // 7. WRITE TO MARKDOWN
+                    #region Write the detailed anomaly report to the Markdown dossier file, including a chronological log of events and highlighting any detected anomalies
                     using (StreamWriter sw = File.AppendText(masterReportOutPath))
                     {
-                        sw.WriteLine($"## 🛰️ Anomaly Target: {bodyName} ({systemName})");
+                        #region Write the header and summary information for this anomaly
+                        sw.WriteLine($"## 🛰️ Anomaly Target: {bodyName}");
                         sw.WriteLine($"- **Detection Timestamp:** `{eventTime:yyyy-MM-dd HH:mm:ss} UTC`");
                         sw.WriteLine($"- **Ghost Target Date:** `{ghostDate}`");
                         sw.WriteLine($"- **Commander Token:** `{uploaderId}`");
                         sw.WriteLine();
                         sw.WriteLine("### 📅 Chronological Flight Timeline Log");
+                        #endregion
 
+                        #region Handle case where no journey events were found for this commander on the specified date
                         if (journey.Count == 0)
                         {
                             sw.WriteLine("> *No event history found in local files for this commander on this day.*");
                         }
+                        #endregion
+                        #region Iterate through the journey events and write them to the Markdown file, highlighting any anomalies detected based on the defined criteria
                         else
                         {
                             foreach (var ev in journey)
                             {
-                                // ANOMALY MATCHING LOGIC
-                                // We flag it if it's a SCAN event, for the right BODY, within 2 seconds of the log time
-                                bool isTheAnomaly = (ev.EventType == "Scan")
-                                                    && (ev.BodyName == bodyName)
-                                                    && Math.Abs((ev.Timestamp - eventTime).TotalSeconds) < 5;
+                                #region ANOMALY MATCHING LOGIC: We flag it if it's a SCAN event, for the right BODY, within 5 seconds of the log time
+                                bool isTheAnomaly = (ev.EventType == "Scan") && (ev.BodyName == bodyName) && Math.Abs((ev.Timestamp - eventTime).TotalSeconds) < 5;
 
                                 string timestamp = $"`{ev.Timestamp:HH:mm:ss}`";
                                 string evtType = $"**{ev.EventType}**";
-                                string info = $"System: *{ev.StarSystem}* | Body: *{ev.BodyName}* {ev.DetailInfo}";
+                                string info = $"System Body: *{ev.BodyName}* {ev.DetailInfo}";
 
                                 if (isTheAnomaly)
-                                {
+                                { 
                                     // 🔴 RED HIGHLIGHT
                                     sw.WriteLine($"- {timestamp} 🔴 {evtType} {info} **<-- [ANOMALY DETECTED]**");
                                     sw.WriteLine($"    - *Reported:* `{reportedDist:F2} LS`");
@@ -279,78 +332,73 @@ namespace ED_TimeSlide
                                     // Standard Line
                                     sw.WriteLine($"- {timestamp} {evtType} {info}");
                                 }
+                                #endregion
                             }
                         }
+                        #endregion
+
+                        #region Write a separator line to clearly delineate between different anomaly reports in the Markdown file
                         sw.WriteLine();
                         sw.WriteLine("---");
                         sw.WriteLine();
+                        #endregion
                     }
+                    #endregion
                 }
+                #region Fail silently on a single bad line so the report finishes, logging the error to the debug console
                 catch (Exception ex)
                 {
-                    // Fail silently on a single bad line so the report finishes
                     System.Diagnostics.Debug.WriteLine($"Report Gen Error: {ex.Message}");
                 }
+                #endregion
             }
+            #endregion
 
+            #region Final Reporting to the UI Log Console
             LogMessage("==================================================");
             LogMessage($"PHASE 2 SUCCESS: Compiled {dossiersWritten} Investigation Records!");
             LogMessage($"Markdown File Saved to: {masterReportOutPath}");
             LogMessage("==================================================");
+            #endregion
 
+            #region Reset the UI state to allow for another analysis run 
             ResetUiState();
+            #endregion
         }
+        #endregion
 
-        private void ResetUiState()
-        {
-            btnSelectFolder.Enabled = true;
-            btnStartAnalysis.Enabled = true;
-        }
-
-
-        private void LogMessage(string message)
-        {
-            // Thread-safe invocation for updating the RichTextBox log
-            if (rtbLog.InvokeRequired)
-            {
-                rtbLog.Invoke(new Action<string>(LogMessage), message);
-            }
-            else
-            {
-                rtbLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
-                rtbLog.SelectionStart = rtbLog.Text.Length;
-                rtbLog.ScrollToCaret();
-            }
-        }
-
+        #region Private Functions
         private void StreamRarArchive(string rarPath, BackgroundWorker worker, int currentProgress)
         {
+            #region Setup the ProcessStartInfo to invoke WinRAR for streaming the contents of the RAR archive
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
-                FileName = winRarExePath,
+                FileName = Settings.winRarExePath,
                 Arguments = $"p -inul \"{rarPath}\"", // Print file contents directly to stdout stream
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 CreateNoWindow = true
             };
             ExecuteStreamReaderProcess(startInfo, rarPath, worker, currentProgress);
+            #endregion
         }
-
         private void StreamBz2Archive(string bz2Path, BackgroundWorker worker, int currentProgress)
         {
+            #region Setup the ProcessStartInfo to invoke WinRAR for streaming the contents of the BZ2 archive
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
-                FileName = winRarExePath,
+                FileName = Settings.winRarExePath,
                 Arguments = $"e -so -inul \"{bz2Path}\"", // 'e -so' extracts any compressed archive to stdout
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 CreateNoWindow = true
             };
             ExecuteStreamReaderProcess(startInfo, bz2Path, worker, currentProgress);
+            #endregion
         }
-
         private void ExecuteStreamReaderProcess(ProcessStartInfo startInfo, string filePath, BackgroundWorker worker, int progress)
         {
+            #region Use a try-catch block to handle any exceptions that may occur during the process execution
             try
             {
                 using (Process process = Process.Start(startInfo))
@@ -371,10 +419,11 @@ namespace ED_TimeSlide
             {
                 worker.ReportProgress(progress, $"[ERROR] Stream failure on {Path.GetFileName(filePath)}: {ex.Message}");
             }
+            #endregion
         }
-
         private void ReadJsonlLitFile(string jsonlPath)
         {
+            #region Read the JSONL file line by line
             using (StreamReader reader = new StreamReader(jsonlPath))
             {
                 string textLine;
@@ -384,17 +433,20 @@ namespace ED_TimeSlide
                     EvaluateAndRouteLine(textLine);
                 }
             }
+            #endregion
         }
-
         private void EvaluateAndRouteLine(string textLine)
         {
+            #region Skip empty or whitespace lines to avoid unnecessary processing
             if (string.IsNullOrWhiteSpace(textLine)) return;
-
+            #endregion
+            #region Filter for Scan events only, ignoring other event types to focus on relevant data
             if (!textLine.Contains("\"event\":\"Scan\"") && !textLine.Contains("\"event\": \"Scan\"")) return;
-
+            #endregion
+            #region Deserialize the JSON line and evaluate it against the registry
             try
             {
-                var record = JsonConvert.DeserializeObject<EddnScanRecord>(textLine);
+                var record = JsonConvert.DeserializeObject<EddnRecords>(textLine);
                 if (record?.Message != null && record.Message.EventName == "Scan")
                 {
                     // REMOVED: The StarType filter is gone! Stars pass through cleanly now.
@@ -402,10 +454,11 @@ namespace ED_TimeSlide
                 }
             }
             catch (JsonException) { }
+            #endregion
         }
-
         private void LoadRegistriesFromDisk()
         {
+            #region Load registries from disk
             try
             {
                 if (File.Exists(masterRegistryPath))
@@ -421,218 +474,140 @@ namespace ED_TimeSlide
                 }
 
             }
+            #endregion
+            #region Handle any exceptions that may occur during the registry loading process
             catch (Exception ex)
             {
                 LogMessage($"[WARNING] Failed initializing registry configuration files: {ex.Message}");
             }
+            #endregion
         }
-
-        private void FormTimeSlipAnalysis_Load(object sender, EventArgs e)
+        private void EvaluateRecordAgainstRegistry(EddnRecords record)
         {
-            LoadRegistriesFromDisk();
-        }
-
-        private bool TryValidateStagingCluster(StagingOrbitBlock stagingBlock, out MasterOrbitAnchor verifiedAnchor, out List<StagedPoint> structuralOutliers)
-        {
-            verifiedAnchor = null;
-            structuralOutliers = new List<StagedPoint>();
-
-            // Detect trajectory direction trend (Only meaningful for moving planets)
-            var firstPt = stagingBlock.CollectedPoints[0];
-            var lastPt = stagingBlock.CollectedPoints[stagingBlock.CollectedPoints.Count - 1];
-            bool dynamicIsClimbing = lastPt.Distance >= firstPt.Distance;
-
-            // Is this a stellar body or a body with no orbital loop cadence?
-            bool isStellarBody = stagingBlock.OrbitalPeriod <= 0;
-
-            // Cycle through each collected point, temporarily treating it as our trusted model truth anchor
-            for (int anchorIndex = 0; anchorIndex < stagingBlock.CollectedPoints.Count; anchorIndex++)
-            {
-                var candidateAnchor = stagingBlock.CollectedPoints[anchorIndex];
-                int agreementCount = 0;
-                var localOutliers = new List<StagedPoint>();
-
-                for (int checkIndex = 0; checkIndex < stagingBlock.CollectedPoints.Count; checkIndex++)
-                {
-                    if (anchorIndex == checkIndex)
-                    {
-                        agreementCount++;
-                        continue;
-                    }
-
-                    var pointToCheck = stagingBlock.CollectedPoints[checkIndex];
-                    bool pointMatchesBaseline = false;
-
-                    if (isStellarBody)
-                    {
-                        // STELLAR BODY EVALUATION: Compare raw fixed positions
-                        double stellarVariance = Math.Abs(pointToCheck.Distance - candidateAnchor.Distance);
-                        if (stellarVariance <= MaxStellarVarianceLs)
-                        {
-                            pointMatchesBaseline = true;
-                        }
-                    }
-                    else
-                    {
-                        // PLANET EVALUATION: Run continuous Kepler prediction vector calculation
-                        double predictedDistance = KeplerOrbitSolver.PredictDistanceAtTimestamp(
-                            stagingBlock.SemiMajorAxis,
-                            stagingBlock.Eccentricity,
-                            stagingBlock.OrbitalPeriod,
-                            candidateAnchor.Timestamp,
-                            candidateAnchor.Distance,
-                            pointToCheck.Timestamp,
-                            dynamicIsClimbing
-                        );
-
-                        double variance = Math.Abs(pointToCheck.Distance - predictedDistance);
-                        double errorPercentage = predictedDistance > 0 ? (variance / predictedDistance) * 100.0 : 0;
-
-                        if (errorPercentage <= MaxAllowedErrorPercent)
-                        {
-                            pointMatchesBaseline = true;
-                        }
-                    }
-
-                    if (pointMatchesBaseline)
-                    {
-                        agreementCount++;
-                    }
-                    else
-                    {
-                        localOutliers.Add(pointToCheck);
-                    }
-                }
-
-                // MAJORITY RULES: If 4 or more points out of our 5-point cluster completely agree, lock it in!
-                if (agreementCount >= 4)
-                {
-                    verifiedAnchor = new MasterOrbitAnchor
-                    {
-                        SemiMajorAxis = stagingBlock.SemiMajorAxis,
-                        Eccentricity = stagingBlock.Eccentricity,
-                        OrbitalPeriod = stagingBlock.OrbitalPeriod,
-                        AnchorTimestamp = candidateAnchor.Timestamp,
-                        AnchorDistance = candidateAnchor.Distance,
-                        VerifiedSourceFile = candidateAnchor.SourceFile,
-                        SoftwareName = candidateAnchor.SoftwareName,
-                        IsClimbingOutward = isStellarBody ? false : dynamicIsClimbing
-                    };
-
-                    structuralOutliers = localOutliers;
-                    return true;
-                }
-            }
-
-            return false;
-        }
- 
-        private void EvaluateRecordAgainstRegistry(EddnScanRecord record)
-        {
+            #region Function Variables
             var msg = record.Message;
+            #endregion
 
-            // Ignore primary suns
-            if (msg.BodyId == 0) return;
+            #region Preliminary Filters            
+            if (msg.BodyId == 0) return; // Ignore primary suns            
+            if (msg.BodyName.Contains("Belt Cluster") || msg.BodyName.Contains("Ring Cluster")) return; // Ignore belt and ring clusters, as they are not valid orbital bodies
+            // DISTANCE GATE FILTER: Turn off secondary star noise and distant binary if the body sits close to the arrivalpoint
+            if (msg.StarType != null && msg.DistanceFromArrivalLS <= Settings.MinStellarDistanceForStars) return;
+            #endregion
 
-            // Ignore belt and ring clusters, as they are not valid orbital bodies
-            if (msg.BodyName.Contains("Belt Cluster") || msg.BodyName.Contains("Ring Cluster")) return;
-
-            // DISTANCE GATE FILTER: Turn off secondary star noise and distant binary sun sets instantly.
-            // If the body sits further than 10,000 LS out, it's a deep system outlier. We drop it.
-            if (msg.StarType != null && msg.DistanceFromArrivalLS <= MinStellarDistanceForStars) return;
-
-            // Create a unique composite lookup key for the specific planet or star body
+            #region Create a unique composite lookup key for the specific planet or star body
             string basePlanetKey = $"{msg.SystemAddress}_{msg.BodyId}";
+            #endregion
 
+            #region Extract the current timestamp and distance from the message for further calculations
             long currentTimestampSeconds = msg.Timestamp.ToUnixSeconds();
             double currentDistance = msg.DistanceFromArrivalLS;
+            #endregion
 
-            // SCENARIO A: The orbital truth model has already been established globally
+            #region SCENARIO A: The orbital truth model has already been established globally
             if (masterRegistry.TryGetValue(basePlanetKey, out MasterOrbitAnchor anchor))
             {
+                #region Initialize the predicted distance variable for the orbital calculation
                 double predictedDistance = 0;
+                #endregion
 
-                // Check if this body is a star or lacks an orbital loop cadence
+                #region Check if this body is a star or lacks an orbital loop cadence
                 if (!string.IsNullOrEmpty(msg.StarType) || anchor.OrbitalPeriod <= 0)
                 {
                     // STELLAR BODY RULE: Stars are physically fixed anchors relative to the system frame.
                     // Their expected coordinate is simply their baseline verified distance!
                     predictedDistance = anchor.AnchorDistance;
                 }
+                #endregion
+                #region Handle the case for standard planets with defined orbital parameters
                 else
                 {
                     // STANDARD PLANET RULE: Run the full continuous Kepler orbit vector calculation
-                    predictedDistance = KeplerOrbitSolver.PredictDistanceAtTimestamp(
-                        anchor.SemiMajorAxis,
-                        anchor.Eccentricity,
-                        anchor.OrbitalPeriod,
-                        anchor.AnchorTimestamp,
-                        anchor.AnchorDistance,
-                        currentTimestampSeconds,
-                        anchor.IsClimbingOutward
-                    );
+                    KeplerOrbitSolver.OrbitalElements orbitalInput = new KeplerOrbitSolver.OrbitalElements
+                    {
+                        SemiMajorAxisMetres = anchor.SemiMajorAxis,
+                        Eccentricity = anchor.Eccentricity,
+                        OrbitalPeriodSeconds = anchor.OrbitalPeriod,
+                        AnchorTimestamp = anchor.AnchorTimestamp,
+                        AnchorDistanceLs = anchor.AnchorDistance,
+                        IsClimbingOutward = anchor.IsClimbingOutward
+                    };
+                    predictedDistance = KeplerOrbitSolver.PredictDistanceAtTimestamp(orbitalInput, currentTimestampSeconds);
                 }
-
+                #endregion
+                #region Calculate the variance and error percentage between the current reported distance and the predicted distance
                 double variance = Math.Abs(currentDistance - predictedDistance);
                 double errorPercentage = predictedDistance > 0 ? (variance / predictedDistance) * 100.0 : 0;
-
-                // THE HYBRID ANOMALY GATEWAY:
+                #endregion
+                #region THE HYBRID ANOMALY GATEWAY:
                 // Flag if a planet drifts (> 2.0%) OR if ANY body (star/planet) shifts by more than 5.0 Light Seconds!
-                if (errorPercentage > MaxAllowedErrorPercent || variance > MaxStellarVarianceLs)
+                if (errorPercentage > Settings.MaxAllowedErrorPercent || variance > Settings.MaxStellarVarianceLs)
                 {
+                    #region Increment the outlier counter and initialize the ghost timestamp variable for potential reverse-Kepler solving
                     foundOutliersCount++;
-
                     long ghostTimeOut = 0;
-                    // Only attempt reverse-Kepler solving if it's a planet with moving orbit properties
+                    #endregion
+                    #region Only attempt reverse-Kepler solving if it's a planet with moving orbit properties
                     if (string.IsNullOrEmpty(msg.StarType) && anchor.OrbitalPeriod > 0)
                     {
-                        long? calculatedGhostTimestamp = KeplerOrbitSolver.SolveGhostTimestamp(
-                            anchor.SemiMajorAxis,
-                            anchor.Eccentricity,
-                            anchor.OrbitalPeriod,
-                            anchor.AnchorTimestamp,
-                            anchor.AnchorDistance,
-                            currentDistance,
-                            anchor.IsClimbingOutward
-                        );
+                        KeplerOrbitSolver.OrbitalElements orbitalInput = new KeplerOrbitSolver.OrbitalElements
+                        {
+                            SemiMajorAxisMetres = anchor.SemiMajorAxis,
+                            Eccentricity = anchor.Eccentricity,
+                            OrbitalPeriodSeconds = anchor.OrbitalPeriod,
+                            AnchorTimestamp = anchor.AnchorTimestamp,
+                            AnchorDistanceLs = anchor.AnchorDistance,
+                            IsClimbingOutward = anchor.IsClimbingOutward
+                        };
+                        long? calculatedGhostTimestamp = KeplerOrbitSolver.SolveGhostTimestamp(orbitalInput, currentDistance);
                         ghostTimeOut = calculatedGhostTimestamp ?? 0;
                     }
+                    #endregion
 
-                    // Write the anomaly out to your file report
+                    #region Write the anomaly out to your file report
                     LogAnomalyToFile(basePlanetKey, record, predictedDistance, anchor.LastCheckedTimestamp, ghostTimeOut);
+                    #endregion
                 }
+                #endregion
+                #region Update the last checked timestamp for the anchor if no anomaly was detected
                 else
                 {
-                    // The coordinate is perfectly valid! Update the baseline tracking anchor 
                     anchor.LastCheckedTimestamp = currentTimestampSeconds;
                 }
+                #endregion
             }
-            // SCENARIO B: The body is not in the master registry
+            #endregion
+            #region SCENARIO B: The body is not in the master registry
             else
             {
-               //Ignore for now
+                //Ignore for now
             }
+            #endregion
         }
-
-        private void LogAnomalyToFile(string registryKey, EddnScanRecord record, double expectedDistance, long previousValidTimestamp, long ghostTimestamp)
+        private void LogAnomalyToFile(string registryKey, EddnRecords record, double expectedDistance, long previousValidTimestamp, long ghostTimestamp)
         {
+            #region Lock the file access to ensure thread safety when writing anomalies to the report file
             lock (fileLock)
             {
+                #region Prepare the anomaly payload for JSON serialization, including all relevant details about the detected anomaly
                 try
                 {
+                    #region Calculate the variance and error percentage for the anomaly report
                     double reportedDistance = record.Message.DistanceFromArrivalLS;
                     double variance = Math.Abs(reportedDistance - expectedDistance);
                     double errorPercentage = (variance / expectedDistance) * 100.0;
-
                     DateTime previousValidDate = DateTimeOffset.FromUnixTimeSeconds(previousValidTimestamp).UtcDateTime;
+                    #endregion
 
-                    // Format our mathematically resolved Ghost Date strings
+                    #region Format our mathematically resolved Ghost Date strings
                     string ghostDateString = "IMPOSSIBLE_ORBIT_GLITCH";
                     if (ghostTimestamp > 0)
                     {
                         ghostDateString = DateTimeOffset.FromUnixTimeSeconds(ghostTimestamp).UtcDateTime.ToString("yyyy-MM-dd HH:mm:ssZ");
                     }
+                    #endregion
 
+                    #region Prepare the anomaly payload for JSON serialization, including all relevant details about the detected anomaly
                     var anomalyPayload = new
                     {
                         DetectionTime = DateTime.UtcNow,
@@ -643,7 +618,6 @@ namespace ED_TimeSlide
 
                         PreviousValidDateZulu = previousValidDate.ToString("yyyy-MM-dd HH:mm:ssZ"),
 
-                        // NEW CALCULATION OUTPUTS:
                         GhostTimestamp = ghostTimestamp,
                         GhostDateZulu = ghostDateString,
 
@@ -655,40 +629,49 @@ namespace ED_TimeSlide
                         ErrorPercentage = errorPercentage,
                         SourceArchive = currentArchiveName
                     };
+                    #endregion
 
+                    #region Append the serialized anomaly payload to the anomalies report file, ensuring each entry is on a new line for easy parsing later
                     string jsonLine = JsonConvert.SerializeObject(anomalyPayload, Formatting.None) + Environment.NewLine;
                     File.AppendAllText(anomaliesReportPath, jsonLine);
+                    #endregion
                 }
+                #endregion
+                #region Handle any exceptions that may occur during the anomaly logging process, writing the error to the debug console for troubleshooting
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"Failed recording anomaly row entry: {ex.Message}");
                 }
+                #endregion
             }
+            #endregion
         }
-        //if (targetUploaderId != "7abccbb30f4bfef60d3218aa7d1bd9afdf78a319") { return timeline; }
-
         /// <summary>
         /// Connects to the online database archive, downloads the target date block log,
         /// and extracts every tracking movement marker belonging to a specific anomalous Commander.
         /// </summary>
         private List<JourneyTimelineEvent> FetchCommanderJourneyLocal(string targetDateYyyyMmDd, string targetUploaderId, string scanFolder, string cacheFolder, string specificSourceFile = "")
         {
+            #region Initialize the timeline list and a HashSet to store unique file paths for processing
             var timeline = new List<JourneyTimelineEvent>();
             var filesToProcess = new HashSet<string>(); // Use HashSet to avoid duplicates automatically
+            #endregion
 
-            // 1. Identify which folders to search
+            #region 1. Identify which folders to search
             var searchPaths = new List<string>();
 
             if (Directory.Exists(scanFolder)) searchPaths.Add(scanFolder);
 
-            // Only add cache folder if it exists and is different from scan folder
+            #region Only add cache folder if it exists and is different from scan folder
             if (!string.IsNullOrWhiteSpace(cacheFolder) && Directory.Exists(cacheFolder)
                 && !searchPaths.Contains(cacheFolder))
             {
                 searchPaths.Add(cacheFolder);
             }
+            #endregion
+            #endregion
 
-            // 2. Gather ALL matching files from ALL locations
+            #region 2. Gather ALL matching files from ALL locations
             foreach (string folder in searchPaths)
             {
                 try
@@ -699,39 +682,42 @@ namespace ED_TimeSlide
                 }
                 catch { }
             }
+            #endregion
 
-            // 2. FORCE INCLUDE THE SOURCE FILE (if valid path provided)
+            #region 3. FORCE INCLUDE THE SOURCE FILE (if valid path provided)
             if (!string.IsNullOrEmpty(specificSourceFile) && File.Exists(specificSourceFile))
             {
                 filesToProcess.Add(specificSourceFile);
             }
-            // Handle case where specificSourceFile is just a filename (e.g. "Journal.Scan...") inside scanFolder
+            #region Handle case where specificSourceFile is just a filename (e.g. "Journal.Scan...") inside scanFolder
             else if (!string.IsNullOrEmpty(specificSourceFile) && Directory.Exists(scanFolder))
             {
                 string potentialPath = Path.Combine(scanFolder, Path.GetFileName(specificSourceFile));
                 if (File.Exists(potentialPath)) filesToProcess.Add(potentialPath);
             }
-
+            #endregion
             System.Diagnostics.Debug.WriteLine($"[LOCAL HUNT] Found {filesToProcess.Count} total files for {targetDateYyyyMmDd} across {searchPaths.Count} folders.");
+            #endregion
 
-            string winRarPath = @"C:\Program Files\WinRAR\WinRAR.exe";
-            if (!File.Exists(winRarPath)) winRarPath = @"C:\Program Files (x86)\WinRAR\WinRAR.exe";
-
-            // 3. Process the Aggregated List
+            #region 4. Process the Aggregated List
             foreach (string filePath in filesToProcess)
             {
+                #region Initialize variables for file processing
                 string[] filesToRead = new string[] { };
                 string tempDir = "";
                 bool isArchive = false;
+                #endregion
 
+                #region Try-Catch block to handle any exceptions during file processing
                 try
                 {
-                    // CASE A: Raw Text File
+                    #region CASE A: Raw Text File
                     if (filePath.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase))
                     {
                         filesToRead = new string[] { filePath };
                     }
-                    // CASE B: Archive -> Extract to Temp
+                    #endregion
+                    #region CASE B: Archive -> Extract to Temp
                     else
                     {
                         isArchive = true;
@@ -740,7 +726,7 @@ namespace ED_TimeSlide
 
                         ProcessStartInfo startInfo = new ProcessStartInfo
                         {
-                            FileName = winRarPath,
+                            FileName = Settings.winRarExePath,
                             Arguments = $"e -y -ibck \"{filePath}\" \"{tempDir}\\\"",
                             UseShellExecute = false,
                             CreateNoWindow = true
@@ -751,27 +737,35 @@ namespace ED_TimeSlide
                             p.WaitForExit();
                         }
 
-                        // FIX: Recursive search to handle WinRAR subfolders
                         if (Directory.Exists(tempDir))
                         {
                             filesToRead = Directory.GetFiles(tempDir, "*.*", SearchOption.AllDirectories);
                         }
                     }
+                    #endregion
 
-                    // 4. READ DATA
+                    #region 5. READ DATA
                     foreach (string file in filesToRead)
                     {
+                        #region Initialize file processing variables
                         if (new FileInfo(file).Length == 0) continue;
-
+                        #endregion
+                        #region Read each line of the file and filter for the target uploader ID, deserializing relevant events into the timeline
                         foreach (string line in File.ReadLines(file))
                         {
+                            #region Skip lines that do not contain the target uploader ID to reduce unnecessary processing
                             if (!line.Contains(targetUploaderId)) continue;
-
+                            #endregion
+                            #region try-catch block to handle potential JSON deserialization errors for each line
                             try
                             {
+                                #region Deserialize the line into an EddnGenericRecord object to access its message and other properties
                                 var record = JsonConvert.DeserializeObject<EddnGenericRecord>(line);
+                                #endregion
+                                #region If the record has a valid message, filter for relevant events and add them to the timeline
                                 if (record?.Message != null)
                                 {
+                                    #region Filter for relevant events and add them to the timeline
                                     string evt = record.Message.EventName;
                                     if (evt == "FSDJump" || evt == "Location" || evt == "CarrierJump"
                                         || evt == "ApproachSettlement" || evt == "Scan" || evt == "Docked" || evt == "Undocked")
@@ -789,16 +783,44 @@ namespace ED_TimeSlide
                                             DetailInfo = details
                                         });
                                     }
+                                    else
+                                    {
+                                        string resolvedSystem = record.Message.StarSystem ?? record.Message.System ?? "Unknown";
+                                        string resolvedBody = record.Message.BodyName ?? record.Message.Body ?? "";
+                                        string details = record.Message.StationName ?? record.Message.Name ?? "";
+
+                                        timeline.Add(new JourneyTimelineEvent
+                                        {
+                                            Timestamp = record.Message.Timestamp,
+                                            EventType = "Unknown",
+                                            StarSystem = resolvedSystem,
+                                            BodyName = resolvedBody,
+                                            DetailInfo = details
+                                        });
+                                    }
+                                    #endregion
                                 }
+                                else
+                                {
+
+                                }
+                                #endregion
                             }
                             catch { }
+                            #endregion
                         }
+                        #endregion
                     }
+                    #endregion
                 }
+                #endregion
+                #region Handle any exceptions that may occur during the file processing, logging the error to the debug console for troubleshooting
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"Error processing {filePath}: {ex.Message}");
                 }
+                #endregion
+                #region Cleanup: Delete the temporary directory if it was created for archive extraction
                 finally
                 {
                     if (isArchive && !string.IsNullOrEmpty(tempDir) && Directory.Exists(tempDir))
@@ -806,35 +828,53 @@ namespace ED_TimeSlide
                         try { Directory.Delete(tempDir, true); } catch { }
                     }
                 }
+                #endregion
             }
+            #endregion
 
-            // 5. Sort & Unique
+            #region 6. Sort & Unique
             return timeline.GroupBy(x => x.Timestamp)
                            .Select(g => g.First())
                            .OrderBy(x => x.Timestamp)
                            .ToList();
+            #endregion
         }
-
-        private void btnSelectWebCache_Click(object sender, EventArgs e)
-        {
-            if (folderBrowserDialogCache.ShowDialog() == DialogResult.OK)
-            {
-                txtWebCachePath.Text = folderBrowserDialogCache.SelectedPath;
-
-                // Optional: Save this path to Properties.Settings.Default so it remembers next time
-                LogMessage($"Web Cache set to: {txtWebCachePath.Text}");
-            }
-        }
-
         private string ExtractDateFromFilename(string filename)
         {
-            // Looks for a pattern like "2025-10-29" inside any string
+            #region Looks for a pattern like "2025-10-29" inside any string
             var match = Regex.Match(filename, @"\d{4}-\d{2}-\d{2}");
             if (match.Success)
             {
                 return match.Value;
             }
             return null;
+            #endregion
         }
+        #endregion
+
+        #region UI Update Functions
+        private void ResetUiState()
+        {
+            #region Re-enable the UI controls after the analysis is complete
+            btnSelectFolder.Enabled = true;
+            btnStartAnalysis.Enabled = true;
+            #endregion
+        }
+        private void LogMessage(string message)
+        {
+            #region Thread-safe invocation for updating the RichTextBox log
+            if (rtbLog.InvokeRequired)
+            {
+                rtbLog.Invoke(new Action<string>(LogMessage), message);
+            }
+            else
+            {
+                rtbLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
+                rtbLog.SelectionStart = rtbLog.Text.Length;
+                rtbLog.ScrollToCaret();
+            }
+            #endregion
+        }
+        #endregion
     }
 }

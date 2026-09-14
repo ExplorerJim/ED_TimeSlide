@@ -45,18 +45,18 @@
             this.form2ToolStripMenuItem,
             this.processingToolStripMenuItem,
             this.journeyTrackerToolStripMenuItem,
-            this.fullAutomatedToolStripMenuItem,
-            this.registryEngineToolStripMenuItem});
+            this.registryEngineToolStripMenuItem,
+            this.fullAutomatedToolStripMenuItem});
             this.menuStrip1.Location = new System.Drawing.Point(0, 0);
             this.menuStrip1.Name = "menuStrip1";
-            this.menuStrip1.Size = new System.Drawing.Size(2092, 25);
+            this.menuStrip1.Size = new System.Drawing.Size(2092, 24);
             this.menuStrip1.TabIndex = 2;
             this.menuStrip1.Text = "menuStrip1";
             // 
             // form2ToolStripMenuItem
             // 
             this.form2ToolStripMenuItem.Name = "form2ToolStripMenuItem";
-            this.form2ToolStripMenuItem.Size = new System.Drawing.Size(113, 21);
+            this.form2ToolStripMenuItem.Size = new System.Drawing.Size(102, 20);
             this.form2ToolStripMenuItem.Text = "Reduce File Size";
             this.form2ToolStripMenuItem.Click += new System.EventHandler(this.form2ToolStripMenuItem_Click);
             // 
@@ -65,34 +65,34 @@
             this.processingToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.process1ToolStripMenuItem});
             this.processingToolStripMenuItem.Name = "processingToolStripMenuItem";
-            this.processingToolStripMenuItem.Size = new System.Drawing.Size(83, 21);
+            this.processingToolStripMenuItem.Size = new System.Drawing.Size(76, 20);
             this.processingToolStripMenuItem.Text = "Processing";
             // 
             // process1ToolStripMenuItem
             // 
             this.process1ToolStripMenuItem.Name = "process1ToolStripMenuItem";
-            this.process1ToolStripMenuItem.Size = new System.Drawing.Size(134, 24);
+            this.process1ToolStripMenuItem.Size = new System.Drawing.Size(123, 22);
             this.process1ToolStripMenuItem.Text = "Process 1";
             this.process1ToolStripMenuItem.Click += new System.EventHandler(this.process1ToolStripMenuItem_Click);
             // 
             // journeyTrackerToolStripMenuItem
             // 
             this.journeyTrackerToolStripMenuItem.Name = "journeyTrackerToolStripMenuItem";
-            this.journeyTrackerToolStripMenuItem.Size = new System.Drawing.Size(111, 21);
+            this.journeyTrackerToolStripMenuItem.Size = new System.Drawing.Size(101, 20);
             this.journeyTrackerToolStripMenuItem.Text = "Journey Tracker";
             this.journeyTrackerToolStripMenuItem.Click += new System.EventHandler(this.journeyTrackerToolStripMenuItem_Click);
             // 
             // fullAutomatedToolStripMenuItem
             // 
             this.fullAutomatedToolStripMenuItem.Name = "fullAutomatedToolStripMenuItem";
-            this.fullAutomatedToolStripMenuItem.Size = new System.Drawing.Size(107, 21);
+            this.fullAutomatedToolStripMenuItem.Size = new System.Drawing.Size(101, 20);
             this.fullAutomatedToolStripMenuItem.Text = "Full Automated";
             this.fullAutomatedToolStripMenuItem.Click += new System.EventHandler(this.fullAutomatedToolStripMenuItem_Click);
             // 
             // registryEngineToolStripMenuItem
             // 
             this.registryEngineToolStripMenuItem.Name = "registryEngineToolStripMenuItem";
-            this.registryEngineToolStripMenuItem.Size = new System.Drawing.Size(110, 21);
+            this.registryEngineToolStripMenuItem.Size = new System.Drawing.Size(100, 20);
             this.registryEngineToolStripMenuItem.Text = "Registry Engine";
             this.registryEngineToolStripMenuItem.Click += new System.EventHandler(this.registryEngineToolStripMenuItem_Click);
             // 

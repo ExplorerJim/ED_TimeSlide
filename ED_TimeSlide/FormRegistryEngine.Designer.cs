@@ -30,7 +30,7 @@
         {
             this.groupBox2 = new System.Windows.Forms.GroupBox();
             this.progressBarFiles = new System.Windows.Forms.ProgressBar();
-            this.lblSkippedSystemsCounter = new System.Windows.Forms.TextBox();
+            this.txbSkippedSystemsCounter = new System.Windows.Forms.TextBox();
             this.label1 = new System.Windows.Forms.Label();
             this.rtbLog = new System.Windows.Forms.RichTextBox();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
@@ -47,7 +47,7 @@
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.groupBox2.Controls.Add(this.progressBarFiles);
-            this.groupBox2.Controls.Add(this.lblSkippedSystemsCounter);
+            this.groupBox2.Controls.Add(this.txbSkippedSystemsCounter);
             this.groupBox2.Controls.Add(this.label1);
             this.groupBox2.Controls.Add(this.rtbLog);
             this.groupBox2.Location = new System.Drawing.Point(13, 97);
@@ -66,14 +66,14 @@
             this.progressBarFiles.Size = new System.Drawing.Size(747, 23);
             this.progressBarFiles.TabIndex = 7;
             // 
-            // lblSkippedSystemsCounter
+            // txbSkippedSystemsCounter
             // 
-            this.lblSkippedSystemsCounter.Location = new System.Drawing.Point(184, 48);
-            this.lblSkippedSystemsCounter.Name = "lblSkippedSystemsCounter";
-            this.lblSkippedSystemsCounter.Size = new System.Drawing.Size(100, 20);
-            this.lblSkippedSystemsCounter.TabIndex = 6;
-            this.lblSkippedSystemsCounter.Text = "0";
-            this.lblSkippedSystemsCounter.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.txbSkippedSystemsCounter.Location = new System.Drawing.Point(137, 48);
+            this.txbSkippedSystemsCounter.Name = "txbSkippedSystemsCounter";
+            this.txbSkippedSystemsCounter.Size = new System.Drawing.Size(100, 20);
+            this.txbSkippedSystemsCounter.TabIndex = 6;
+            this.txbSkippedSystemsCounter.Text = "0";
+            this.txbSkippedSystemsCounter.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             // 
             // label1
             // 
@@ -168,7 +168,7 @@
         private System.Windows.Forms.TextBox txtFolderPath;
         private System.Windows.Forms.Button btnSelectFolder;
         private System.Windows.Forms.Button btnStartAnalysis;
-        private System.Windows.Forms.TextBox lblSkippedSystemsCounter;
+        private System.Windows.Forms.TextBox txbSkippedSystemsCounter;
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.ProgressBar progressBarFiles;
     }

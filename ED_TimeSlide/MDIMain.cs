@@ -48,8 +48,8 @@ namespace ED_TimeSlide
             //Load_Form_Instance(inst_Process1);
             //Load_Form_Instance(inst_Journey_Tracker);
 
-            //Load_Form_Instance(inst_FormTimeSlipAnalysis);
-            Load_Form_Instance(inst_FormRegistryEngine);
+            Load_Form_Instance(inst_FormTimeSlipAnalysis);
+            //Load_Form_Instance(inst_FormRegistryEngine);
         }
         #region Tool Strip
         private void form1ToolStripMenuItem1_Click(object sender, EventArgs e)

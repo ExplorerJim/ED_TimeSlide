@@ -3,6 +3,7 @@ using System.Collections.Generic;
 
 namespace ED_TimeSlide
 {
+    #region Classes
     /// <summary>
     /// Holds a single, 100% mathematically verified orbital anchor.
     /// This is what gets saved permanently to your Master Registry JSON file on disk.
@@ -45,4 +46,5 @@ namespace ED_TimeSlide
         public string SoftwareName { get; set; }
         public string UploaderId { get; set; }
     }
+    #endregion
 }

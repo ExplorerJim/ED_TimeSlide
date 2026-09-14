@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 
 namespace ED_TimeSlide
 {
+    #region Classes for EDDN message structure
     public class JourneyTimelineEvent
     {
         public DateTime Timestamp { get; set; }
@@ -55,4 +56,5 @@ namespace ED_TimeSlide
         [JsonProperty("message")]
         public EddnGenericMessage Message { get; set; }
     }
+    #endregion
 }
