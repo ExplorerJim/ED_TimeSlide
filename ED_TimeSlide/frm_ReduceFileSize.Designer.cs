@@ -28,38 +28,46 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.txb_InputFileNames = new System.Windows.Forms.TextBox();
-            this.label1 = new System.Windows.Forms.Label();
-            this.but_AddFile = new System.Windows.Forms.Button();
-            this.txb_Status = new System.Windows.Forms.TextBox();
-            this.groupBox1 = new System.Windows.Forms.GroupBox();
-            this.openFileDialog1 = new System.Windows.Forms.OpenFileDialog();
-            this.but_Run = new System.Windows.Forms.Button();
-            this.but_ClearFileNames = new System.Windows.Forms.Button();
-            this.groupBox2 = new System.Windows.Forms.GroupBox();
-            this.groupBox3 = new System.Windows.Forms.GroupBox();
-            this.groupBox4 = new System.Windows.Forms.GroupBox();
-            this.rad_MultipleFiles = new System.Windows.Forms.RadioButton();
-            this.rad_OneFile = new System.Windows.Forms.RadioButton();
-            this.but_SaveFileName = new System.Windows.Forms.Button();
-            this.txb_OutputFileName = new System.Windows.Forms.TextBox();
-            this.lab_OutputFileName = new System.Windows.Forms.Label();
-            this.saveFileDialog1 = new System.Windows.Forms.SaveFileDialog();
             this.chk_MultiThreaded = new System.Windows.Forms.CheckBox();
-            this.groupBox1.SuspendLayout();
+            this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.label1 = new System.Windows.Forms.Label();
+            this.txb_InputFileNames = new System.Windows.Forms.TextBox();
+            this.but_AddFile = new System.Windows.Forms.Button();
+            this.but_ClearFileNames = new System.Windows.Forms.Button();
+            this.but_Run = new System.Windows.Forms.Button();
+            this.openFileDialog1 = new System.Windows.Forms.OpenFileDialog();
+            this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.prg_IngestionProgress = new System.Windows.Forms.ProgressBar();
+            this.txb_Status = new System.Windows.Forms.TextBox();
+            this.but_Abort = new System.Windows.Forms.Button();
             this.groupBox2.SuspendLayout();
-            this.groupBox3.SuspendLayout();
-            this.groupBox4.SuspendLayout();
+            this.groupBox1.SuspendLayout();
             this.SuspendLayout();
             // 
-            // txb_InputFileNames
+            // chk_MultiThreaded
             // 
-            this.txb_InputFileNames.Location = new System.Drawing.Point(75, 19);
-            this.txb_InputFileNames.Multiline = true;
-            this.txb_InputFileNames.Name = "txb_InputFileNames";
-            this.txb_InputFileNames.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txb_InputFileNames.Size = new System.Drawing.Size(700, 110);
-            this.txb_InputFileNames.TabIndex = 0;
+            this.chk_MultiThreaded.AutoSize = true;
+            this.chk_MultiThreaded.Location = new System.Drawing.Point(752, 161);
+            this.chk_MultiThreaded.Name = "chk_MultiThreaded";
+            this.chk_MultiThreaded.Size = new System.Drawing.Size(97, 17);
+            this.chk_MultiThreaded.TabIndex = 13;
+            this.chk_MultiThreaded.Text = "Multi Threaded";
+            this.chk_MultiThreaded.UseVisualStyleBackColor = true;
+            // 
+            // groupBox2
+            // 
+            this.groupBox2.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.groupBox2.Controls.Add(this.label1);
+            this.groupBox2.Controls.Add(this.txb_InputFileNames);
+            this.groupBox2.Controls.Add(this.but_AddFile);
+            this.groupBox2.Controls.Add(this.but_ClearFileNames);
+            this.groupBox2.Location = new System.Drawing.Point(12, 12);
+            this.groupBox2.Name = "groupBox2";
+            this.groupBox2.Size = new System.Drawing.Size(864, 139);
+            this.groupBox2.TabIndex = 11;
+            this.groupBox2.TabStop = false;
+            this.groupBox2.Text = "Input";
             // 
             // label1
             // 
@@ -70,8 +78,20 @@
             this.label1.TabIndex = 1;
             this.label1.Text = "File Names";
             // 
+            // txb_InputFileNames
+            // 
+            this.txb_InputFileNames.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.txb_InputFileNames.Location = new System.Drawing.Point(75, 19);
+            this.txb_InputFileNames.Multiline = true;
+            this.txb_InputFileNames.Name = "txb_InputFileNames";
+            this.txb_InputFileNames.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            this.txb_InputFileNames.Size = new System.Drawing.Size(700, 110);
+            this.txb_InputFileNames.TabIndex = 0;
+            // 
             // but_AddFile
             // 
+            this.but_AddFile.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.but_AddFile.Location = new System.Drawing.Point(781, 17);
             this.but_AddFile.Name = "but_AddFile";
             this.but_AddFile.Size = new System.Drawing.Size(75, 23);
@@ -80,51 +100,9 @@
             this.but_AddFile.UseVisualStyleBackColor = true;
             this.but_AddFile.Click += new System.EventHandler(this.but_FindFile_Click);
             // 
-            // txb_Status
-            // 
-            this.txb_Status.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.txb_Status.Location = new System.Drawing.Point(6, 19);
-            this.txb_Status.Multiline = true;
-            this.txb_Status.Name = "txb_Status";
-            this.txb_Status.RightToLeft = System.Windows.Forms.RightToLeft.No;
-            this.txb_Status.ScrollBars = System.Windows.Forms.ScrollBars.Both;
-            this.txb_Status.Size = new System.Drawing.Size(1512, 111);
-            this.txb_Status.TabIndex = 4;
-            this.txb_Status.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            // 
-            // groupBox1
-            // 
-            this.groupBox1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.groupBox1.Controls.Add(this.txb_Status);
-            this.groupBox1.Location = new System.Drawing.Point(15, 187);
-            this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Size = new System.Drawing.Size(1524, 136);
-            this.groupBox1.TabIndex = 5;
-            this.groupBox1.TabStop = false;
-            this.groupBox1.Text = "Status";
-            // 
-            // openFileDialog1
-            // 
-            this.openFileDialog1.FileName = "openFileDialog1";
-            this.openFileDialog1.Multiselect = true;
-            this.openFileDialog1.FileOk += new System.ComponentModel.CancelEventHandler(this.openFileDialog1_FileOk);
-            // 
-            // but_Run
-            // 
-            this.but_Run.Location = new System.Drawing.Point(13, 158);
-            this.but_Run.Name = "but_Run";
-            this.but_Run.Size = new System.Drawing.Size(1526, 23);
-            this.but_Run.TabIndex = 2;
-            this.but_Run.Text = "Run";
-            this.but_Run.UseVisualStyleBackColor = true;
-            this.but_Run.Click += new System.EventHandler(this.but_Run_Click);
-            // 
             // but_ClearFileNames
             // 
+            this.but_ClearFileNames.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.but_ClearFileNames.Location = new System.Drawing.Point(781, 46);
             this.but_ClearFileNames.Name = "but_ClearFileNames";
             this.but_ClearFileNames.Size = new System.Drawing.Size(75, 23);
@@ -133,130 +111,83 @@
             this.but_ClearFileNames.UseVisualStyleBackColor = true;
             this.but_ClearFileNames.Click += new System.EventHandler(this.but_ClearFileNames_Click);
             // 
-            // groupBox2
+            // but_Run
             // 
-            this.groupBox2.Controls.Add(this.label1);
-            this.groupBox2.Controls.Add(this.txb_InputFileNames);
-            this.groupBox2.Controls.Add(this.but_AddFile);
-            this.groupBox2.Controls.Add(this.but_ClearFileNames);
-            this.groupBox2.Location = new System.Drawing.Point(13, 13);
-            this.groupBox2.Name = "groupBox2";
-            this.groupBox2.Size = new System.Drawing.Size(864, 139);
-            this.groupBox2.TabIndex = 6;
-            this.groupBox2.TabStop = false;
-            this.groupBox2.Text = "Input";
+            this.but_Run.Location = new System.Drawing.Point(12, 157);
+            this.but_Run.Name = "but_Run";
+            this.but_Run.Size = new System.Drawing.Size(364, 23);
+            this.but_Run.TabIndex = 9;
+            this.but_Run.Text = "Run";
+            this.but_Run.UseVisualStyleBackColor = true;
+            this.but_Run.Click += new System.EventHandler(this.but_Run_Click);
             // 
-            // groupBox3
+            // openFileDialog1
             // 
-            this.groupBox3.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.openFileDialog1.FileName = "openFileDialog1";
+            this.openFileDialog1.Multiselect = true;
+            // 
+            // groupBox1
+            // 
+            this.groupBox1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.groupBox3.Controls.Add(this.groupBox4);
-            this.groupBox3.Controls.Add(this.but_SaveFileName);
-            this.groupBox3.Controls.Add(this.txb_OutputFileName);
-            this.groupBox3.Controls.Add(this.lab_OutputFileName);
-            this.groupBox3.Location = new System.Drawing.Point(884, 13);
-            this.groupBox3.Name = "groupBox3";
-            this.groupBox3.Size = new System.Drawing.Size(655, 98);
-            this.groupBox3.TabIndex = 7;
-            this.groupBox3.TabStop = false;
-            this.groupBox3.Text = "Output";
+            this.groupBox1.Controls.Add(this.prg_IngestionProgress);
+            this.groupBox1.Controls.Add(this.txb_Status);
+            this.groupBox1.Location = new System.Drawing.Point(14, 186);
+            this.groupBox1.Name = "groupBox1";
+            this.groupBox1.Size = new System.Drawing.Size(862, 417);
+            this.groupBox1.TabIndex = 10;
+            this.groupBox1.TabStop = false;
+            this.groupBox1.Text = "Status";
             // 
-            // groupBox4
+            // prg_IngestionProgress
             // 
-            this.groupBox4.Controls.Add(this.rad_MultipleFiles);
-            this.groupBox4.Controls.Add(this.rad_OneFile);
-            this.groupBox4.Location = new System.Drawing.Point(10, 17);
-            this.groupBox4.Name = "groupBox4";
-            this.groupBox4.Size = new System.Drawing.Size(231, 42);
-            this.groupBox4.TabIndex = 6;
-            this.groupBox4.TabStop = false;
-            this.groupBox4.Text = "Output Type";
+            this.prg_IngestionProgress.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.prg_IngestionProgress.Location = new System.Drawing.Point(11, 20);
+            this.prg_IngestionProgress.Name = "prg_IngestionProgress";
+            this.prg_IngestionProgress.Size = new System.Drawing.Size(845, 23);
+            this.prg_IngestionProgress.TabIndex = 5;
             // 
-            // rad_MultipleFiles
+            // txb_Status
             // 
-            this.rad_MultipleFiles.AutoSize = true;
-            this.rad_MultipleFiles.Location = new System.Drawing.Point(76, 19);
-            this.rad_MultipleFiles.Name = "rad_MultipleFiles";
-            this.rad_MultipleFiles.Size = new System.Drawing.Size(152, 17);
-            this.rad_MultipleFiles.TabIndex = 6;
-            this.rad_MultipleFiles.Text = "Multiple Files (auto naming)";
-            this.rad_MultipleFiles.UseVisualStyleBackColor = true;
-            this.rad_MultipleFiles.CheckedChanged += new System.EventHandler(this.rad_MultipleFiles_CheckedChanged);
+            this.txb_Status.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.txb_Status.Location = new System.Drawing.Point(6, 49);
+            this.txb_Status.Multiline = true;
+            this.txb_Status.Name = "txb_Status";
+            this.txb_Status.RightToLeft = System.Windows.Forms.RightToLeft.No;
+            this.txb_Status.ScrollBars = System.Windows.Forms.ScrollBars.Both;
+            this.txb_Status.Size = new System.Drawing.Size(850, 362);
+            this.txb_Status.TabIndex = 4;
             // 
-            // rad_OneFile
+            // but_Abort
             // 
-            this.rad_OneFile.AutoSize = true;
-            this.rad_OneFile.Checked = true;
-            this.rad_OneFile.Location = new System.Drawing.Point(6, 19);
-            this.rad_OneFile.Name = "rad_OneFile";
-            this.rad_OneFile.Size = new System.Drawing.Size(64, 17);
-            this.rad_OneFile.TabIndex = 5;
-            this.rad_OneFile.TabStop = true;
-            this.rad_OneFile.Text = "One File";
-            this.rad_OneFile.UseVisualStyleBackColor = true;
-            this.rad_OneFile.CheckedChanged += new System.EventHandler(this.rad_OneFile_CheckedChanged);
-            // 
-            // but_SaveFileName
-            // 
-            this.but_SaveFileName.Location = new System.Drawing.Point(573, 63);
-            this.but_SaveFileName.Name = "but_SaveFileName";
-            this.but_SaveFileName.Size = new System.Drawing.Size(75, 23);
-            this.but_SaveFileName.TabIndex = 4;
-            this.but_SaveFileName.Text = "File Location";
-            this.but_SaveFileName.UseVisualStyleBackColor = true;
-            this.but_SaveFileName.Click += new System.EventHandler(this.but_SaveFileName_Click);
-            // 
-            // txb_OutputFileName
-            // 
-            this.txb_OutputFileName.Location = new System.Drawing.Point(67, 65);
-            this.txb_OutputFileName.Name = "txb_OutputFileName";
-            this.txb_OutputFileName.Size = new System.Drawing.Size(500, 20);
-            this.txb_OutputFileName.TabIndex = 3;
-            this.txb_OutputFileName.Text = "D:\\Documents\\Gaming\\ED\\EDD Journals\\Temp.EDD";
-            // 
-            // lab_OutputFileName
-            // 
-            this.lab_OutputFileName.AutoSize = true;
-            this.lab_OutputFileName.Location = new System.Drawing.Point(6, 68);
-            this.lab_OutputFileName.Name = "lab_OutputFileName";
-            this.lab_OutputFileName.Size = new System.Drawing.Size(54, 13);
-            this.lab_OutputFileName.TabIndex = 2;
-            this.lab_OutputFileName.Text = "File Name";
-            // 
-            // saveFileDialog1
-            // 
-            this.saveFileDialog1.FileOk += new System.ComponentModel.CancelEventHandler(this.saveFileDialog1_FileOk);
-            // 
-            // chk_MultiThreaded
-            // 
-            this.chk_MultiThreaded.AutoSize = true;
-            this.chk_MultiThreaded.Location = new System.Drawing.Point(884, 118);
-            this.chk_MultiThreaded.Name = "chk_MultiThreaded";
-            this.chk_MultiThreaded.Size = new System.Drawing.Size(97, 17);
-            this.chk_MultiThreaded.TabIndex = 8;
-            this.chk_MultiThreaded.Text = "Multi Threaded";
-            this.chk_MultiThreaded.UseVisualStyleBackColor = true;
+            this.but_Abort.Location = new System.Drawing.Point(382, 157);
+            this.but_Abort.Name = "but_Abort";
+            this.but_Abort.Size = new System.Drawing.Size(364, 23);
+            this.but_Abort.TabIndex = 9;
+            this.but_Abort.Text = "Abort";
+            this.but_Abort.UseVisualStyleBackColor = true;
+            this.but_Abort.Click += new System.EventHandler(this.but_Abort_Click);
             // 
             // frm_ReduceFileSize
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1551, 335);
+            this.ClientSize = new System.Drawing.Size(886, 616);
             this.Controls.Add(this.chk_MultiThreaded);
-            this.Controls.Add(this.groupBox3);
             this.Controls.Add(this.groupBox2);
-            this.Controls.Add(this.groupBox1);
+            this.Controls.Add(this.but_Abort);
             this.Controls.Add(this.but_Run);
+            this.Controls.Add(this.groupBox1);
             this.Name = "frm_ReduceFileSize";
-            this.Text = "Reduce File Size";
-            this.groupBox1.ResumeLayout(false);
-            this.groupBox1.PerformLayout();
+            this.Text = "Populate Scan Database with EDDN data";
             this.groupBox2.ResumeLayout(false);
             this.groupBox2.PerformLayout();
-            this.groupBox3.ResumeLayout(false);
-            this.groupBox3.PerformLayout();
-            this.groupBox4.ResumeLayout(false);
-            this.groupBox4.PerformLayout();
+            this.groupBox1.ResumeLayout(false);
+            this.groupBox1.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -264,23 +195,17 @@
 
         #endregion
 
-        private System.Windows.Forms.TextBox txb_InputFileNames;
-        private System.Windows.Forms.Label label1;
-        private System.Windows.Forms.Button but_AddFile;
-        private System.Windows.Forms.TextBox txb_Status;
-        private System.Windows.Forms.GroupBox groupBox1;
-        private System.Windows.Forms.OpenFileDialog openFileDialog1;
-        private System.Windows.Forms.Button but_Run;
-        private System.Windows.Forms.Button but_ClearFileNames;
-        private System.Windows.Forms.GroupBox groupBox2;
-        private System.Windows.Forms.GroupBox groupBox3;
-        private System.Windows.Forms.TextBox txb_OutputFileName;
-        private System.Windows.Forms.Label lab_OutputFileName;
-        private System.Windows.Forms.SaveFileDialog saveFileDialog1;
-        private System.Windows.Forms.Button but_SaveFileName;
-        private System.Windows.Forms.GroupBox groupBox4;
-        private System.Windows.Forms.RadioButton rad_MultipleFiles;
-        private System.Windows.Forms.RadioButton rad_OneFile;
         private System.Windows.Forms.CheckBox chk_MultiThreaded;
+        private System.Windows.Forms.GroupBox groupBox2;
+        private System.Windows.Forms.Label label1;
+        private System.Windows.Forms.TextBox txb_InputFileNames;
+        private System.Windows.Forms.Button but_AddFile;
+        private System.Windows.Forms.Button but_ClearFileNames;
+        private System.Windows.Forms.Button but_Run;
+        private System.Windows.Forms.OpenFileDialog openFileDialog1;
+        private System.Windows.Forms.GroupBox groupBox1;
+        private System.Windows.Forms.TextBox txb_Status;
+        private System.Windows.Forms.Button but_Abort;
+        private System.Windows.Forms.ProgressBar prg_IngestionProgress;
     }
 }

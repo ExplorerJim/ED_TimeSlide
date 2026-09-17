@@ -141,5 +141,37 @@ namespace ED_TimeSlide
         }
         #endregion
 
+        public static void EvaluateAndRouteLine(string textLine, Action<EddnRecords> successCallback)
+        {
+            // Basic structural validation gate matching specification section 3.02.02
+            if (string.IsNullOrWhiteSpace(textLine)) return;
+            if (!textLine.Contains("\"event\":\"Scan\"") && !textLine.Contains("\"event\": \"Scan\"")) return;
+
+            try
+            {
+                var record = Newtonsoft.Json.JsonConvert.DeserializeObject<EddnRecords>(textLine);
+
+                if (record?.Message != null && record.Message.EventName == "Scan")
+                {
+                    // Execute validation filter parameters check
+                    if (record.Message.BodyId == 0) return;
+                    if (record.Message.BodyName.Contains("Belt Cluster")) return;
+                    if (record.Message.BodyName.Contains("Ring Cluster")) return;
+
+                    if (record.Message.StarType != null &&
+                        record.Message.DistanceFromArrivalLS <= Settings.MinStellarDistanceForStars)
+                    {
+                        return;
+                    }
+
+                    successCallback(record);
+                }
+            }
+            catch
+            {
+                // TODO: Handle or route corrupt line string logging profiles to \Data\Errors\
+            }
+        }
+
     }
 }

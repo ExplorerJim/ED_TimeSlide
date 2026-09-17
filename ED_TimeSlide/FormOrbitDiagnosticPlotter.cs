@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using static ED_TimeSlide.ScanDataStorageDriver;
 
 namespace ED_TimeSlide
 {
@@ -87,11 +88,11 @@ namespace ED_TimeSlide
             }
             #endregion
 
-            #region Version 1.19: Purge Visual Axis Constraint Rules and Reset Radio State
-            // Clears persistent ScottPlot constraint rule filters inherited from prior closeups
+            #region Clear persistent ScottPlot constraint rule filters inherited from prior closeups
             formsPlotCanvas.Plot.Axes.Rules.Clear();
+            #endregion
 
-            // Synchronizes interface controls deck back onto standard unconstrained free 2D rules
+            #region Synchronizes interface controls deck back onto standard unconstrained free 2D rules
             if (rdoZoomStandard != null && !rdoZoomStandard.Checked)
             {
                 rdoZoomStandard.Checked = true;
@@ -99,7 +100,7 @@ namespace ED_TimeSlide
             }
             #endregion
 
-            #region Version 1.15: Perform Constant Time Key Retrieval Pass
+            #region  Perform Constant Time Key Retrieval Pass
             string targetRegistryKey = parallelRegistryKeys[targetedSelectionIndex];
 
             if (!inst_OrbitRegistry.TryGetMasterAnchor(targetRegistryKey, out MasterOrbitAnchor anchor))
@@ -129,6 +130,10 @@ namespace ED_TimeSlide
             {
                 lblPlotterStatus.Text = $"[ERROR] Interface Chart Render Fault: {ex.Message}";
             }
+            #endregion
+
+            #region Collect system name and body name from scan database
+            // TODO: CelestialDataset dataset = ScanDataStorageDriver.GetCelestialDataset(targetSystemEdId, targetBodyEdId);
             #endregion
         }
 

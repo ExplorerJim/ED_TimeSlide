@@ -38,6 +38,7 @@ namespace ED_TimeSlide
         FormTimeSlipAnalysis inst_FormTimeSlipAnalysis;
         FormRegistryEngine inst_FormRegistryEngine;
         FormOrbitDiagnosticPlotter inst_FormOrbitDiagnosticPlotter;
+
         private OrbitRegistry inst_OrbitRegistry;
         #endregion
 

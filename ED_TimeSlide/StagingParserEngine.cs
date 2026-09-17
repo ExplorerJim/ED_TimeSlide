@@ -64,8 +64,8 @@ namespace ED_TimeSlide
         private void SanitizeScanMessageStrings(ScanMessage msg)
         {
             #region Section 3.3 Clean and Validate Core String Primitives
-            string targetSystem = (!string.IsNullOrEmpty(msg.StarSystem) ? msg.StarSystem : "Unknown").Trim();
-            string targetBody = (!string.IsNullOrEmpty(msg.BodyName) ? msg.BodyName : "Unknown").Trim();
+            string targetSystem = (!string.IsNullOrEmpty(msg.StarSystem) ? msg.StarSystem : Settings.UnknownData).Trim();
+            string targetBody = (!string.IsNullOrEmpty(msg.BodyName) ? msg.BodyName : Settings.UnknownData).Trim();
 
             if (!string.IsNullOrEmpty(msg.ScanType)) msg.ScanType = msg.ScanType.Trim();
             if (!string.IsNullOrEmpty(msg.StarType)) msg.StarType = msg.StarType.Trim();

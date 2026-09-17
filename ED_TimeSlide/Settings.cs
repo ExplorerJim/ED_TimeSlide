@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.IO;
+using System.Windows.Forms;
 
 namespace ED_TimeSlide
 {
@@ -30,6 +28,16 @@ namespace ED_TimeSlide
         public static readonly double PlotXAxisMargin = 0.01;
         public static readonly double PaddingTimeCushion = 0.05;
         public static readonly double PlotYAxisMarginPercent = 0.10;
+        #endregion
+
+        #region Scan Database
+        private static readonly string BaseDataDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
+        public static readonly string DatabasesDir = Path.Combine(BaseDataDir, "Databases");
+        public static readonly string LogsDir = Path.Combine(BaseDataDir, "Logs");
+        public static readonly string ErrorsDir = Path.Combine(BaseDataDir, "Errors");
+        public static readonly string ReportsDir = Path.Combine(BaseDataDir, "Reports");
+        public static readonly string ScanDataDbPath = Path.Combine(DatabasesDir, "ScanData.db");
+        public static readonly string UnknownData = "Unknown";
         #endregion
     }
 }
