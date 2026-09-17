@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.IO;
 using ZedGraph;
 
 namespace ED_TimeSlide
@@ -16,13 +17,14 @@ namespace ED_TimeSlide
     {
         #region Varibles
         public List<MDIMain.ED_Data> Database;
+        private CancellationTokenSource _cts;
+        private bool _isProcessing = false;
         #endregion
 
         #region Public Events
         public frm_ReduceFileSize()
         {
             InitializeComponent();
-
             saveFileDialog1.Filter = "EDData | *.EDD";
 
             #region Load Varibles
@@ -36,11 +38,13 @@ namespace ED_TimeSlide
         {
             Database = new List<MDIMain.ED_Data>();
         }
+
         #region GUI private functions
         private void but_FindFile_Click(object sender, EventArgs e)
         {
             openFileDialog1.ShowDialog();
         }
+
         private void openFileDialog1_FileOk(object sender, CancelEventArgs e)
         {
             if (openFileDialog1.FileNames.Length > 0)
@@ -69,415 +73,406 @@ namespace ED_TimeSlide
                 }
             }
         }
+
         private void but_ClearFileNames_Click(object sender, EventArgs e)
         {
             txb_InputFileNames.Text = "";
         }
+
         private void but_SaveFileName_Click(object sender, EventArgs e)
         {
             saveFileDialog1.ShowDialog();
         }
+
         private void saveFileDialog1_FileOk(object sender, CancelEventArgs e)
         {
             txb_OutputFileName.Text = saveFileDialog1.FileName;
         }
+
         private void rad_MultipleFiles_CheckedChanged(object sender, EventArgs e)
         {
             lab_OutputFileName.Enabled = false;
             txb_OutputFileName.Enabled = false;
             but_SaveFileName.Enabled = false;
         }
+
         private void rad_OneFile_CheckedChanged(object sender, EventArgs e)
         {
             lab_OutputFileName.Enabled = true;
             txb_OutputFileName.Enabled = true;
             but_SaveFileName.Enabled = true;
         }
-        private void but_Run_Click(object sender, EventArgs e)
-        {
-            /// Function Variables
-            StreamReader sw;
-            string[] files = new string[0];
-            string fileline = "";
-            string temp_string = "";
-            string[] lineitems = new string[0];
-            string[] singlesection = new string[0];
-            MDIMain.ED_Data temp_data = new MDIMain.ED_Data();
-            string starsystem = "";
-            string body = "";
-            DateTime timestamp = new DateTime();
-            double distance = 0;
-            bool timestamp_created = false;
-            string dateprocessing = "";
-            int year = 0;
-            int month = 0;
-            int day = 0;
-            int hour = 0;
-            int minute = 0;
-            int second = 0;
-            bool starsystemfound = false;
-            bool bodyfound = false;
-            MDIMain.ED_Data_Point temp_datapoint = new MDIMain.ED_Data_Point();
-            MDIMain.ED_Data_Body temp_body = new MDIMain.ED_Data_Body();
-            MDIMain.ED_Data temp_starsystem = new MDIMain.ED_Data();
-            int added = 0;
+        #endregion
+        #endregion
 
-            /// Get the filenames from the textbox
-            files = txb_InputFileNames.Text.Split(new string[] { Environment.NewLine }, StringSplitOptions.None);
-                        
-            txb_Status.Text = "Starting process" + Environment.NewLine;
-            #region loop through each file
+        private async void but_Run_Click(object sender, EventArgs e)
+        {
+            if (_isProcessing) return;
+
+            string[] files = txb_InputFileNames.Text.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+            bool isMultipleFilesChecked = rad_MultipleFiles.Checked;
+            bool isOneFileChecked = rad_OneFile.Checked;
+            string outputFileName = txb_OutputFileName.Text;
+            bool useMultiThreading = chk_MultiThreaded.Checked;
+
+            if (files == null || files.Length == 0)
+            {
+                MessageBox.Show("Please select input files first.", "No Files Found", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                _isProcessing = true;
+                but_Run_Click_DisableUI(false);
+                txb_Status.Text = (useMultiThreading ? "Starting Multi-Threaded engine..." : "Starting Single-Threaded engine...") + Environment.NewLine;
+
+                await Task.Run(() =>
+                {
+                    if (useMultiThreading)
+                        ProcessFilesMultiThreaded(files, isMultipleFilesChecked, isOneFileChecked, outputFileName);
+                    else
+                        ProcessFilesSingleThreaded(files, isMultipleFilesChecked, isOneFileChecked, outputFileName);
+                });
+            }
+            catch (Exception ex)
+            {
+                this.Invoke((MethodInvoker)delegate { txb_Status.AppendText($"Critical Error: {ex.Message}" + Environment.NewLine); });
+            }
+            finally
+            {
+                _isProcessing = false;
+                but_Run_Click_DisableUI(true);
+            }
+        }
+
+        private void but_Run_Click_DisableUI(bool enable)
+        {
+            but_Run.Enabled = enable;
+        }
+
+        private void ProcessFilesSingleThreaded(string[] files, bool multipleFilesChecked, bool oneFileChecked, string outputFileName)
+        {
+            #region Variables
+            StreamReader sw; string fileline = ""; string temp_string = ""; string[] lineitems; string[] singlesection;
+            string starsystem = ""; string body = ""; DateTime timestamp = new DateTime(); double distance = 0; bool timestamp_created = false;
+            string dateprocessing = ""; int year, month, day, hour, minute, second; bool starsystemfound = false; bool bodyfound = false;
+            int added = 0;
+            #endregion
+
             for (int f = 0; f < files.Length; f++)
             {
-                /// Update the status textbox 
-                txb_Status.AppendText("Process: " + files[f] + Environment.NewLine);
+                if (string.IsNullOrWhiteSpace(files[f])) continue;
+                string currentFile = files[f];
+                this.Invoke((MethodInvoker)delegate { txb_Status.AppendText("Process: " + currentFile + Environment.NewLine); });
+
                 try
                 {
-                    /// create the streamreader to read the file
                     sw = new StreamReader(files[f]);
-                    
-                    #region Read file line by line
                     while (!sw.EndOfStream)
                     {
                         fileline = sw.ReadLine();
-                        temp_data = new MDIMain.ED_Data();
+                        if (fileline == "") continue;
+                        lineitems = fileline.Split(',');
+                        starsystem = ""; body = ""; distance = 0; timestamp_created = false;
 
-                        #region If string is not blank
-                        if (fileline != "")
+                        for (int i = 0; i < lineitems.Length; i++)
                         {
-                            /// Split the line up by ,
-                            lineitems = fileline.Split(',');
+                            singlesection = lineitems[i].Split(':');
 
-                            /// Reset all the data
-                            starsystem = "";
-                            body = "";
-                            timestamp = new DateTime();
-                            distance = 0;
-                            timestamp_created = false;
-
-                            #region Loop throught the section of the line
-                            for (int i = 0; i < lineitems.Length; i++)
+                            // FIX: Added line items array element targets [1] to pull values out of json tokens
+                            if (lineitems[i].Contains("StarSystem"))
                             {
-                                singlesection = lineitems[i].Split(':');
-
-                                #region Check for needed data
-                                #region StarSystem
-                                if (singlesection[0].Contains("StarSystem"))
-                                {
-                                    temp_string = singlesection[1];
-                                    temp_string = temp_string.Remove(0, 2);
-                                    starsystem = temp_string.Remove(temp_string.Length - 1, 1);
-                                }
-                                #endregion
-                                #region BodyName
-                                else if (singlesection[0].Contains("BodyName"))
-                                {
-                                    temp_string = singlesection[1];
-                                    temp_string = temp_string.Remove(0, 2);
-                                    body = temp_string.Remove(temp_string.Length - 1, 1);
-
-                                    #region Check if this is a body type wanted
-                                    if (body.Contains("Belt Cluster") || body.Contains("Ring"))
-                                    {
-                                        /// Break to next line
-                                        break; 
-                                    }
-                                    #endregion
-                                }
-                                #endregion
-                                #region Timestamp
-                                else if (singlesection[0].Contains("timestamp" + '"'))
-                                {
-                                    temp_string = singlesection[1] + ":" + singlesection[2] + ":" + singlesection[3];
-                                    temp_string = temp_string.Remove(0, 2);
-                                    dateprocessing = temp_string.Remove(4, temp_string.Length - 4);
-                                    year = int.Parse(dateprocessing);
-                                    dateprocessing = temp_string.Substring(5, 2);
-                                    month = int.Parse(dateprocessing);
-                                    dateprocessing = temp_string.Substring(8, 2);
-                                    day = int.Parse(dateprocessing);
-                                    dateprocessing = temp_string.Substring(11, 2);
-                                    hour = int.Parse(dateprocessing);
-                                    dateprocessing = temp_string.Substring(14, 2);
-                                    minute = int.Parse(dateprocessing);
-                                    dateprocessing = temp_string.Substring(17, 2);
-                                    second = int.Parse(dateprocessing);
-                                    timestamp = new DateTime(year, month, day, hour, minute, second);
-                                    timestamp_created = true;
-                                }
-                                #endregion
-                                #region Distance
-                                else if (singlesection[0].Contains("DistanceFromArrivalLS"))
-                                {
-                                    temp_string = singlesection[1];
-                                    distance = Convert.ToDouble(temp_string.Remove(0, 1));
-
-                                    #region Is it the primary star, if so next line
-                                    if(distance == 0)
-                                    {
-                                        break;
-                                    }
-                                    #endregion
-                                }
-                                #endregion
-                                #region Remove some moons
-                                if (singlesection[0].Contains("Parents"))
-                                {
-                                    if(singlesection[1].Contains("Planet"))
-                                    {
-                                        break;
-                                    }
-                                }
-                                #endregion
-                                #endregion
-
-                                #region Was all required data found?
-                                if (starsystem != "" && body != "" && distance > 0 && timestamp_created)
-                                {
-                                    starsystemfound = false;
-                                    bodyfound = false;
-
-                                    #region Remove system name from body, both can be the same 
-                                    if (body != starsystem)
-                                    {
-                                        if (body.Contains(starsystem))
-                                        {
-                                            body = body.Replace(starsystem, "");
-                                            body = body.Remove(0, 1);
-
-                                            if (body.Length > 5)
-                                            {
-
-                                            }
-                                        }
-                                        else
-                                        {
-
-                                        }
-                                    }
-                                    #endregion
-                                    #region Remove moons
-                                    if (body.Length > 2)
-                                    {
-                                        if (char.IsLetter(body[body.Length - 1]) && char.IsSeparator(body[body.Length - 2]))
-                                        {
-                                            break;
-                                        }
-                                    }
-                                    #endregion
-                                    #region check if star system is already known
-                                    #region loop throught the database
-                                    for (int d = 0; d < Database.Count; d++)
-                                    {
-                                        #region Does the starsystem match
-                                        if (Database[d].System_Name == starsystem)
-                                        {
-                                            starsystemfound = true;
-                                            #region check if the body is known
-                                            for (int b = 0; b < Database[d].Bodies.Count; b++)
-                                            {
-                                                #region Does the name match
-                                                if (Database[d].Bodies[b].Body_Name == body)
-                                                {
-                                                    bodyfound = true;
-
-                                                    #region Add data here
-                                                    temp_datapoint = new MDIMain.ED_Data_Point();
-                                                    temp_datapoint.TimeData = timestamp;
-                                                    temp_datapoint.DistanceFromArrivalLS = distance;
-                                                    Database[d].Bodies[b].Data_Points.Add(temp_datapoint);
-                                                    added++;
-                                                    #endregion
-                                                    break;
-                                                }
-                                                #endregion
-                                            }
-                                            #endregion
-
-                                            #region If not found add a new body to the list
-                                            if (!bodyfound)
-                                            {
-                                                temp_body = new MDIMain.ED_Data_Body();
-                                                temp_body.Body_Name = body;
-                                                temp_body.Data_Points = new List<MDIMain.ED_Data_Point>();
-                                                temp_datapoint = new MDIMain.ED_Data_Point();
-                                                temp_datapoint.TimeData = timestamp;
-                                                temp_datapoint.DistanceFromArrivalLS = distance;
-                                                temp_body.Data_Points.Add(temp_datapoint);
-                                                Database[d].Bodies.Add(temp_body);
-                                                added++;
-                                                break;
-                                            }
-
-                                            #endregion
-                                        }
-                                        #endregion
-                                    }
-                                    #endregion
-                                    #region If the star system wasn't found add a new enty
-                                    if (!starsystemfound)
-                                    {
-                                        temp_starsystem = new MDIMain.ED_Data();
-                                        temp_starsystem.System_Name = starsystem;
-                                        temp_starsystem.Bodies = new List<MDIMain.ED_Data_Body>();
-                                        temp_body = new MDIMain.ED_Data_Body();
-                                        temp_body.Body_Name = body;
-                                        temp_body.Data_Points = new List<MDIMain.ED_Data_Point>();
-                                        temp_datapoint = new MDIMain.ED_Data_Point();
-                                        temp_datapoint.TimeData = timestamp;
-                                        temp_datapoint.DistanceFromArrivalLS = distance;
-                                        temp_body.Data_Points.Add(temp_datapoint);
-                                        temp_starsystem.Bodies.Add(temp_body);
-                                        Database.Add(temp_starsystem);
-                                        added++;
-                                        break;
-                                    }
-                                    #endregion
-                                    #endregion
-                                }
-                                #endregion
+                                temp_string = singlesection[1].Remove(0, 2); starsystem = temp_string.Remove(temp_string.Length - 1, 1);
                             }
-                            #endregion
+                            else if (lineitems[i].Contains("BodyName"))
+                            {
+                                temp_string = singlesection[1].Remove(0, 2); body = temp_string.Remove(temp_string.Length - 1, 1);
+                                if (body.Contains("Belt Cluster") || body.Contains("Ring")) break;
+                            }
+                            else if (lineitems[i].Contains("timestamp" + '"'))
+                            {
+                                temp_string = singlesection[1] + ":" + singlesection[2] + ":" + singlesection[3];
+                                temp_string = temp_string.Remove(0, 2);
+                                year = int.Parse(temp_string.Remove(4, temp_string.Length - 4)); month = int.Parse(temp_string.Substring(5, 2)); day = int.Parse(temp_string.Substring(8, 2));
+                                hour = int.Parse(temp_string.Substring(11, 2)); minute = int.Parse(temp_string.Substring(14, 2)); second = int.Parse(temp_string.Substring(17, 2));
+                                timestamp = new DateTime(year, month, day, hour, minute, second); timestamp_created = true;
+                            }
+                            else if (lineitems[i].Contains("DistanceFromArrivalLS"))
+                            {
+                                distance = Convert.ToDouble(singlesection[1].Remove(0, 1)); if (distance == 0) break;
+                            }
+                            else if (lineitems[i].Contains("Parents") && lineitems[i].Contains("Planet")) break;
+
+                            if (starsystem != "" && body != "" && distance > 0 && timestamp_created)
+                            {
+                                if (body != starsystem && body.Contains(starsystem)) body = body.Replace(starsystem, "").Remove(0, 1);
+                                if (body.Length > 2 && char.IsLetter(body[body.Length - 1]) && char.IsSeparator(body[body.Length - 2])) break;
+
+                                starsystemfound = false; bodyfound = false;
+                                for (int d = 0; d < Database.Count; d++)
+                                {
+                                    if (Database[d].System_Name == starsystem)
+                                    {
+                                        starsystemfound = true;
+                                        var currentSys = Database[d];
+                                        for (int b = 0; b < currentSys.Bodies.Count; b++)
+                                        {
+                                            if (currentSys.Bodies[b].Body_Name == body)
+                                            {
+                                                bodyfound = true;
+                                                currentSys.Bodies[b].Data_Points.Add(new MDIMain.ED_Data_Point { TimeData = timestamp, DistanceFromArrivalLS = distance });
+                                                added++; break;
+                                            }
+                                        }
+                                        if (!bodyfound)
+                                        {
+                                            var newB = new MDIMain.ED_Data_Body { Body_Name = body, Data_Points = new List<MDIMain.ED_Data_Point>() };
+                                            newB.Data_Points.Add(new MDIMain.ED_Data_Point { TimeData = timestamp, DistanceFromArrivalLS = distance });
+                                            currentSys.Bodies.Add(newB); added++;
+                                        }
+                                        Database[d] = currentSys;
+                                        break;
+                                    }
+                                }
+                                if (!starsystemfound)
+                                {
+                                    var newSys = new MDIMain.ED_Data { System_Name = starsystem, Bodies = new List<MDIMain.ED_Data_Body>() };
+                                    var newB = new MDIMain.ED_Data_Body { Body_Name = body, Data_Points = new List<MDIMain.ED_Data_Point>() };
+                                    newB.Data_Points.Add(new MDIMain.ED_Data_Point { TimeData = timestamp, DistanceFromArrivalLS = distance });
+                                    newSys.Bodies.Add(newB); Database.Add(newSys); added++; break;
+                                }
+                            }
                         }
-                        #endregion
                     }
-                    #endregion
-                    
                     sw.Dispose();
                 }
                 catch
                 {
-                    txb_Status.AppendText("Catch during file read" + Environment.NewLine);
-                    return;
+                    this.Invoke((MethodInvoker)delegate { txb_Status.AppendText("Catch during file read" + Environment.NewLine); }); return;
                 }
 
-
-                #region Save File One - Multiple
-                if (rad_MultipleFiles.Checked)
+                if (multipleFilesChecked)
                 {
-                    #region Sort the data
-                    /// Sort systems by name
                     Database.Sort((s1, s2) => s1.System_Name.CompareTo(s2.System_Name));
-
-                    #region For each system
                     for (int s = 0; s < Database.Count; s++)
                     {
-                        #region for each body
-                        for (int b = 0; b < Database[s].Bodies.Count; b++)
-                        {
-                            /// Sort the body data points by date
-                            Database[s].Bodies[b].Data_Points.Sort((s1, s2) => s1.TimeData.CompareTo(s2.TimeData));
-                        }
-                        #endregion
-
-                        /// Sort the bodies in sistance order of the first data point
-                        Database[s].Bodies.Sort((s1, s2) => s1.Data_Points[0].DistanceFromArrivalLS.CompareTo(s2.Data_Points[0].DistanceFromArrivalLS));
+                        for (int b = 0; b < Database[s].Bodies.Count; b++) Database[s].Bodies[b].Data_Points.Sort((s1, s2) => s1.TimeData.CompareTo(s2.TimeData));
+                        Database[s].Bodies.Sort((b1, b2) => b1.Data_Points[0].DistanceFromArrivalLS.CompareTo(b2.Data_Points[0].DistanceFromArrivalLS));
                     }
-                    #endregion
-
-                    txb_Status.AppendText("Database sorted" + Environment.NewLine);
-                    #endregion
-
-                    #region Write file
-                    temp_string = files[f].Remove(files[f].Length - 5, 5);
-                    temp_string += "EDD";
-
+                    temp_string = files[f].Remove(files[f].Length - 5, 5) + "EDD";
                     using (StreamWriter sw2 = new StreamWriter(temp_string))
                     {
-                        #region for each system
                         for (int s = 0; s < Database.Count; s++)
                         {
-                            #region for each body
                             for (int b = 0; b < Database[s].Bodies.Count; b++)
                             {
                                 temp_string = Database[s].System_Name + "," + Database[s].Bodies[b].Body_Name;
-
-                                #region for each data point
-                                for (int d = 0; d < Database[s].Bodies[b].Data_Points.Count; d++)
-                                {
-                                    temp_string += "," + Database[s].Bodies[b].Data_Points[d].TimeData.ToOADate() + "," + Database[s].Bodies[b].Data_Points[d].DistanceFromArrivalLS.ToString();
-                                }
-                                #endregion
-
-                                /// Write the body data to file
+                                for (int d = 0; d < Database[s].Bodies[b].Data_Points.Count; d++) temp_string += "," + Database[s].Bodies[b].Data_Points[d].TimeData.ToOADate() + "," + Database[s].Bodies[b].Data_Points[d].DistanceFromArrivalLS.ToString();
                                 sw2.WriteLine(temp_string);
                             }
-                            #endregion
                         }
-                        #endregion
-
                     }
-                    #endregion
-
-                    /// Clear Database
                     Database = new List<MDIMain.ED_Data>();
-
-                    txb_Status.AppendText("File saved" + Environment.NewLine);
                 }
-                #endregion
             }
-            #endregion
 
-            #region One file export
-            if (rad_OneFile.Checked)
+            if (oneFileChecked)
             {
-                txb_Status.AppendText("Load process complete. " + (Database.Count).ToString() + " Systems found, " + added.ToString() + " data points." + Environment.NewLine);
-
-                #region Sort the data
-                /// Sort systems by name
+                this.Invoke((MethodInvoker)delegate { txb_Status.AppendText("Load complete. " + Database.Count.ToString() + " Systems." + Environment.NewLine); });
                 Database.Sort((s1, s2) => s1.System_Name.CompareTo(s2.System_Name));
-
-                #region For each system
                 for (int s = 0; s < Database.Count; s++)
                 {
-                    #region for each body
-                    for (int b = 0; b < Database[s].Bodies.Count; b++)
-                    {
-                        /// Sort the body data points by date
-                        Database[s].Bodies[b].Data_Points.Sort((s1, s2) => s1.TimeData.CompareTo(s2.TimeData));
-                    }
-                    #endregion
-
-                    /// Sort the bodies in sistance order of the first data point
-                    Database[s].Bodies.Sort((s1, s2) => s1.Data_Points[0].DistanceFromArrivalLS.CompareTo(s2.Data_Points[0].DistanceFromArrivalLS));
+                    for (int b = 0; b < Database[s].Bodies.Count; b++) Database[s].Bodies[b].Data_Points.Sort((s1, s2) => s1.TimeData.CompareTo(s2.TimeData));
+                    Database[s].Bodies.Sort((b1, b2) => b1.Data_Points[0].DistanceFromArrivalLS.CompareTo(b2.Data_Points[0].DistanceFromArrivalLS));
                 }
-                #endregion
-
-                txb_Status.AppendText("Database sorted" + Environment.NewLine);
-                #endregion
-
-                #region Save File One - File
-                using (StreamWriter sw2 = new StreamWriter(txb_OutputFileName.Text))
+                using (StreamWriter sw2 = new StreamWriter(outputFileName))
                 {
-                    #region for each system
                     for (int s = 0; s < Database.Count; s++)
                     {
-                        #region for each body
                         for (int b = 0; b < Database[s].Bodies.Count; b++)
                         {
                             temp_string = Database[s].System_Name + "," + Database[s].Bodies[b].Body_Name;
-
-                            #region for each data point
-                            for (int d = 0; d < Database[s].Bodies[b].Data_Points.Count; d++)
-                            {
-                                temp_string += "," + Database[s].Bodies[b].Data_Points[d].TimeData.ToOADate() + "," + Database[s].Bodies[b].Data_Points[d].DistanceFromArrivalLS.ToString();
-                            }
-                            #endregion
-
-                            /// Write the body data to file
+                            for (int d = 0; d < Database[s].Bodies[b].Data_Points.Count; d++) temp_string += "," + Database[s].Bodies[b].Data_Points[d].TimeData.ToOADate() + "," + Database[s].Bodies[b].Data_Points[d].DistanceFromArrivalLS.ToString();
                             sw2.WriteLine(temp_string);
                         }
-                        #endregion
                     }
-                    #endregion
-
                 }
-                txb_Status.AppendText("File saved" + Environment.NewLine);
-                #endregion
+                this.Invoke((MethodInvoker)delegate { txb_Status.AppendText("File saved successfully." + Environment.NewLine); });
             }
-            #endregion
         }
-        #endregion
-        #endregion
+
+
+        private void ProcessFilesMultiThreaded(string[] files, bool multipleFilesChecked, bool oneFileChecked, string outputFileName)
+        {
+            var localThreadCaches = new System.Collections.Concurrent.ConcurrentBag<Dictionary<string, MDIMain.ED_Data>>();
+            int globalAddedCounter = 0;
+
+            this.Invoke((MethodInvoker)delegate { txb_Status.AppendText("Parallel.ForEach running with fixed sequential struct persistence..." + Environment.NewLine); });
+
+            Parallel.ForEach(files, currentFile =>
+            {
+                if (string.IsNullOrWhiteSpace(currentFile)) return;
+                var localDatabase = new Dictionary<string, MDIMain.ED_Data>();
+
+                try
+                {
+                    using (StreamReader sw = new StreamReader(currentFile))
+                    {
+                        while (!sw.EndOfStream)
+                        {
+                            string fileline = sw.ReadLine();
+                            if (string.IsNullOrEmpty(fileline)) continue;
+                            string[] lineitems = fileline.Split(',');
+                            string starsystem = ""; string body = ""; double distance = 0; bool timestamp_created = false;
+                            DateTime timestamp = new DateTime();
+
+                            for (int i = 0; i < lineitems.Length; i++)
+                            {
+                                string[] singlesection = lineitems[i].Split(':');
+                                if (singlesection.Length < 2) continue;
+
+                                if (lineitems[i].Contains("StarSystem"))
+                                {
+                                    string ts = singlesection[1]; ts = ts.Remove(0, 2); starsystem = ts.Remove(ts.Length - 1, 1);
+                                }
+                                else if (lineitems[i].Contains("BodyName"))
+                                {
+                                    string ts = singlesection[1]; ts = ts.Remove(0, 2); body = ts.Remove(ts.Length - 1, 1);
+                                    if (body.Contains("Belt Cluster") || body.Contains("Ring")) break;
+                                }
+                                else if (lineitems[i].Contains("timestamp" + '"'))
+                                {
+                                    string ts = singlesection[1] + ":" + singlesection[2] + ":" + singlesection[3];
+                                    ts = ts.Remove(0, 2);
+                                    int y = int.Parse(ts.Remove(4, ts.Length - 4)); int m = int.Parse(ts.Substring(5, 2)); int d = int.Parse(ts.Substring(8, 2));
+                                    int h = int.Parse(ts.Substring(11, 2)); int min = int.Parse(ts.Substring(14, 2)); int sec = int.Parse(ts.Substring(17, 2));
+                                    timestamp = new DateTime(y, m, d, h, min, sec); timestamp_created = true;
+                                }
+                                else if (lineitems[i].Contains("DistanceFromArrivalLS"))
+                                {
+                                    distance = Convert.ToDouble(singlesection[1].Remove(0, 1)); if (distance == 0) break;
+                                }
+                                else if (lineitems[i].Contains("Parents") && lineitems[i].Contains("Planet")) break;
+
+                                if (starsystem != "" && body != "" && distance > 0 && timestamp_created)
+                                {
+                                    if (body != starsystem && body.Contains(starsystem)) body = body.Replace(starsystem, "").Remove(0, 1);
+                                    if (body.Length > 2 && char.IsLetter(body[body.Length - 1]) && char.IsSeparator(body[body.Length - 2])) break;
+
+                                    // FIX: Look up existing system entry within local batch context instead of overwriting it blank
+                                    if (!localDatabase.TryGetValue(starsystem, out var systemRecord))
+                                    {
+                                        systemRecord = new MDIMain.ED_Data { System_Name = starsystem, Bodies = new List<MDIMain.ED_Data_Body>() };
+                                    }
+
+                                    int bodyIdx = systemRecord.Bodies.FindIndex(b => b.Body_Name == body);
+                                    if (bodyIdx < 0)
+                                    {
+                                        var newBody = new MDIMain.ED_Data_Body { Body_Name = body, Data_Points = new List<MDIMain.ED_Data_Point>() };
+                                        newBody.Data_Points.Add(new MDIMain.ED_Data_Point { TimeData = timestamp, DistanceFromArrivalLS = distance });
+                                        systemRecord.Bodies.Add(newBody);
+                                    }
+                                    else
+                                    {
+                                        systemRecord.Bodies[bodyIdx].Data_Points.Add(new MDIMain.ED_Data_Point { TimeData = timestamp, DistanceFromArrivalLS = distance });
+                                    }
+
+                                    localDatabase[starsystem] = systemRecord; // Struct persistence writeback re-injection
+                                    Interlocked.Increment(ref globalAddedCounter); break;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                if (multipleFilesChecked)
+                {
+                    var singleFileList = localDatabase.Values.ToList();
+                    singleFileList.Sort((s1, s2) => s1.System_Name.CompareTo(s2.System_Name));
+                    string singleOutPath = currentFile.Remove(currentFile.Length - 5, 5) + "EDD";
+                    using (StreamWriter sw2 = new StreamWriter(singleOutPath))
+                    {
+                        foreach (var sys in singleFileList)
+                        {
+                            if (sys.Bodies.Count > 0)
+                                sys.Bodies.Sort((b1, b2) => b1.Data_Points[0].DistanceFromArrivalLS.CompareTo(b2.Data_Points[0].DistanceFromArrivalLS));
+                            foreach (var b in sys.Bodies)
+                            {
+                                b.Data_Points.Sort((dp1, dp2) => dp1.TimeData.CompareTo(dp2.TimeData));
+                                string temp_string = sys.System_Name + "," + b.Body_Name;
+                                foreach (var d in b.Data_Points) temp_string += "," + d.TimeData.ToOADate() + "," + d.DistanceFromArrivalLS.ToString();
+                                sw2.WriteLine(temp_string);
+                            }
+                        }
+                    }
+                }
+                else { localThreadCaches.Add(localDatabase); }
+            });
+
+            if (oneFileChecked)
+            {
+                this.Invoke((MethodInvoker)delegate { txb_Status.AppendText("Performing Deferred Master Merge..." + Environment.NewLine); });
+                Database.Clear();
+
+                foreach (var localCache in localThreadCaches)
+                {
+                    foreach (var kvp in localCache)
+                    {
+                        int masterSysIdx = Database.FindIndex(s => s.System_Name == kvp.Key);
+                        if (masterSysIdx < 0)
+                        {
+                            Database.Add(kvp.Value);
+                        }
+                        else
+                        {
+                            var masterSystem = Database[masterSysIdx];
+                            foreach (var incomingBody in kvp.Value.Bodies)
+                            {
+                                int masterBodyIdx = masterSystem.Bodies.FindIndex(b => b.Body_Name == incomingBody.Body_Name);
+                                if (masterBodyIdx < 0)
+                                {
+                                    masterSystem.Bodies.Add(incomingBody);
+                                }
+                                else
+                                {
+                                    // FIX: Cumulative merge constraint - accurately appends every matching data point
+                                    masterSystem.Bodies[masterBodyIdx].Data_Points.AddRange(incomingBody.Data_Points);
+                                }
+                            }
+                            Database[masterSysIdx] = masterSystem; // Global struct writeback
+                        }
+                    }
+                }
+
+                Database.Sort((s1, s2) => s1.System_Name.CompareTo(s2.System_Name));
+                foreach (var system in Database)
+                {
+                    foreach (var body in system.Bodies) body.Data_Points.Sort((dp1, dp2) => dp1.TimeData.CompareTo(dp2.TimeData));
+                    if (system.Bodies.Count > 0)
+                        system.Bodies.Sort((b1, b2) => b1.Data_Points[0].DistanceFromArrivalLS.CompareTo(b2.Data_Points[0].DistanceFromArrivalLS));
+                }
+
+                using (StreamWriter sw2 = new StreamWriter(outputFileName))
+                {
+                    foreach (var s in Database)
+                    {
+                        foreach (var b in s.Bodies)
+                        {
+                            string temp_string = s.System_Name + "," + b.Body_Name;
+                            foreach (var d in b.Data_Points)
+                            {
+                                temp_string += "," + d.TimeData.ToOADate() + "," + d.DistanceFromArrivalLS.ToString();
+                            }
+                            sw2.WriteLine(temp_string);
+                        }
+                    }
+                }
+                this.Invoke((MethodInvoker)delegate { txb_Status.AppendText($"Process Complete! {Database.Count} Systems, {globalAddedCounter} points saved." + Environment.NewLine); });
+            }
+        }
+
+
     }
 }

@@ -1,9 +1,10 @@
-﻿using System;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
+using System;
+using System.Collections.Generic;
 
 namespace ED_TimeSlide
 {
-    #region Structures
+    #region EDDN Telemetry Scan Models
     public class EddnRecords
     {
         [JsonProperty("header")]
@@ -45,9 +46,6 @@ namespace ED_TimeSlide
         [JsonProperty("DistanceFromArrivalLS")]
         public double DistanceFromArrivalLS { get; set; }
 
-        [JsonProperty("SemiMajorAxis")]
-        public double SemiMajorAxis { get; set; }
-
         [JsonProperty("Eccentricity")]
         public double Eccentricity { get; set; }
 
@@ -57,8 +55,22 @@ namespace ED_TimeSlide
         [JsonProperty("StarType")]
         public string StarType { get; set; }
 
+        [JsonProperty("PlanetClass")]
+        public string PlanetClass { get; set; }
+
         [JsonProperty("SystemAddress")]
         public long SystemAddress { get; set; }
+
+        [JsonProperty("Parents")]
+        public Dictionary<string, int>[] Parents { get; set; }
+
+        // Mapped exclusively for standard planetary/stellar frames
+        [JsonProperty("SemiMajorAxis")]
+        public double SemiMajorAxis { get; set; }
+
+        // BARYCENTER FIX: Extracts the gravitational node orbital radius fallback parameter 
+        [JsonProperty("Axis")]
+        public double Axis { get; set; }
     }
     #endregion
 }

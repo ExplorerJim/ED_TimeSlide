@@ -33,8 +33,10 @@
             this.processingToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.process1ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.journeyTrackerToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.fullAutomatedToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.registryEngineToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.fullAutomatedToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.orbitalPlotterToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.menuStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -46,7 +48,8 @@
             this.processingToolStripMenuItem,
             this.journeyTrackerToolStripMenuItem,
             this.registryEngineToolStripMenuItem,
-            this.fullAutomatedToolStripMenuItem});
+            this.fullAutomatedToolStripMenuItem,
+            this.toolsToolStripMenuItem});
             this.menuStrip1.Location = new System.Drawing.Point(0, 0);
             this.menuStrip1.Name = "menuStrip1";
             this.menuStrip1.Size = new System.Drawing.Size(2092, 24);
@@ -82,6 +85,13 @@
             this.journeyTrackerToolStripMenuItem.Text = "Journey Tracker";
             this.journeyTrackerToolStripMenuItem.Click += new System.EventHandler(this.journeyTrackerToolStripMenuItem_Click);
             // 
+            // registryEngineToolStripMenuItem
+            // 
+            this.registryEngineToolStripMenuItem.Name = "registryEngineToolStripMenuItem";
+            this.registryEngineToolStripMenuItem.Size = new System.Drawing.Size(100, 20);
+            this.registryEngineToolStripMenuItem.Text = "Registry Engine";
+            this.registryEngineToolStripMenuItem.Click += new System.EventHandler(this.registryEngineToolStripMenuItem_Click);
+            // 
             // fullAutomatedToolStripMenuItem
             // 
             this.fullAutomatedToolStripMenuItem.Name = "fullAutomatedToolStripMenuItem";
@@ -89,12 +99,20 @@
             this.fullAutomatedToolStripMenuItem.Text = "Full Automated";
             this.fullAutomatedToolStripMenuItem.Click += new System.EventHandler(this.fullAutomatedToolStripMenuItem_Click);
             // 
-            // registryEngineToolStripMenuItem
+            // toolsToolStripMenuItem
             // 
-            this.registryEngineToolStripMenuItem.Name = "registryEngineToolStripMenuItem";
-            this.registryEngineToolStripMenuItem.Size = new System.Drawing.Size(100, 20);
-            this.registryEngineToolStripMenuItem.Text = "Registry Engine";
-            this.registryEngineToolStripMenuItem.Click += new System.EventHandler(this.registryEngineToolStripMenuItem_Click);
+            this.toolsToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.orbitalPlotterToolStripMenuItem});
+            this.toolsToolStripMenuItem.Name = "toolsToolStripMenuItem";
+            this.toolsToolStripMenuItem.Size = new System.Drawing.Size(47, 20);
+            this.toolsToolStripMenuItem.Text = "Tools";
+            // 
+            // orbitalPlotterToolStripMenuItem
+            // 
+            this.orbitalPlotterToolStripMenuItem.Name = "orbitalPlotterToolStripMenuItem";
+            this.orbitalPlotterToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.orbitalPlotterToolStripMenuItem.Text = "Orbital Plotter";
+            this.orbitalPlotterToolStripMenuItem.Click += new System.EventHandler(this.orbitalPlotterToolStripMenuItem_Click);
             // 
             // MDIMain
             // 
@@ -123,5 +141,7 @@
         private System.Windows.Forms.ToolStripMenuItem journeyTrackerToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem fullAutomatedToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem registryEngineToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem toolsToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem orbitalPlotterToolStripMenuItem;
     }
 }

@@ -45,6 +45,7 @@
             this.txb_OutputFileName = new System.Windows.Forms.TextBox();
             this.lab_OutputFileName = new System.Windows.Forms.Label();
             this.saveFileDialog1 = new System.Windows.Forms.SaveFileDialog();
+            this.chk_MultiThreaded = new System.Windows.Forms.CheckBox();
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
             this.groupBox3.SuspendLayout();
@@ -226,11 +227,22 @@
             // 
             this.saveFileDialog1.FileOk += new System.ComponentModel.CancelEventHandler(this.saveFileDialog1_FileOk);
             // 
+            // chk_MultiThreaded
+            // 
+            this.chk_MultiThreaded.AutoSize = true;
+            this.chk_MultiThreaded.Location = new System.Drawing.Point(884, 118);
+            this.chk_MultiThreaded.Name = "chk_MultiThreaded";
+            this.chk_MultiThreaded.Size = new System.Drawing.Size(97, 17);
+            this.chk_MultiThreaded.TabIndex = 8;
+            this.chk_MultiThreaded.Text = "Multi Threaded";
+            this.chk_MultiThreaded.UseVisualStyleBackColor = true;
+            // 
             // frm_ReduceFileSize
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1551, 335);
+            this.Controls.Add(this.chk_MultiThreaded);
             this.Controls.Add(this.groupBox3);
             this.Controls.Add(this.groupBox2);
             this.Controls.Add(this.groupBox1);
@@ -246,6 +258,7 @@
             this.groupBox4.ResumeLayout(false);
             this.groupBox4.PerformLayout();
             this.ResumeLayout(false);
+            this.PerformLayout();
 
         }
 
@@ -268,5 +281,6 @@
         private System.Windows.Forms.GroupBox groupBox4;
         private System.Windows.Forms.RadioButton rad_MultipleFiles;
         private System.Windows.Forms.RadioButton rad_OneFile;
+        private System.Windows.Forms.CheckBox chk_MultiThreaded;
     }
 }

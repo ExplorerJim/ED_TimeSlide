@@ -37,6 +37,8 @@ namespace ED_TimeSlide
         frm_Journey_Tracker inst_Journey_Tracker;
         FormTimeSlipAnalysis inst_FormTimeSlipAnalysis;
         FormRegistryEngine inst_FormRegistryEngine;
+        FormOrbitDiagnosticPlotter inst_FormOrbitDiagnosticPlotter;
+        private OrbitRegistry inst_OrbitRegistry;
         #endregion
 
         public MDIMain()
@@ -48,7 +50,7 @@ namespace ED_TimeSlide
             //Load_Form_Instance(inst_Process1);
             //Load_Form_Instance(inst_Journey_Tracker);
 
-            Load_Form_Instance(inst_FormTimeSlipAnalysis);
+            //Load_Form_Instance(inst_FormTimeSlipAnalysis);
             //Load_Form_Instance(inst_FormRegistryEngine);
         }
         #region Tool Strip
@@ -72,7 +74,7 @@ namespace ED_TimeSlide
         {
             if(inst_FormTimeSlipAnalysis == null || inst_FormTimeSlipAnalysis.IsDisposed)
             {
-                inst_FormTimeSlipAnalysis = new FormTimeSlipAnalysis();
+                inst_FormTimeSlipAnalysis = new FormTimeSlipAnalysis(inst_OrbitRegistry);
                 inst_FormTimeSlipAnalysis.MdiParent = this;
             }
 
@@ -82,10 +84,19 @@ namespace ED_TimeSlide
         {
             Load_Form_Instance(inst_FormRegistryEngine);
         }
+        private void orbitalPlotterToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            Load_Form_Instance(inst_FormOrbitDiagnosticPlotter);
+        }
         #endregion
         #region Private Functions
         private void Load_Variables()
         {
+            #region Instantiate and Load Central Registry Table
+            inst_OrbitRegistry = new OrbitRegistry();
+            inst_OrbitRegistry.LoadRegistriesFromDisk();
+            #endregion
+
             inst_ReduceFileSize = new frm_ReduceFileSize();
             inst_ReduceFileSize.MdiParent = this;
 
@@ -95,11 +106,14 @@ namespace ED_TimeSlide
             inst_Journey_Tracker = new frm_Journey_Tracker();
             inst_Journey_Tracker.MdiParent = this;
 
-            inst_FormTimeSlipAnalysis = new FormTimeSlipAnalysis();
+            inst_FormTimeSlipAnalysis = new FormTimeSlipAnalysis(inst_OrbitRegistry);
             inst_FormTimeSlipAnalysis.MdiParent = this;
 
-            inst_FormRegistryEngine = new FormRegistryEngine();
+            inst_FormRegistryEngine = new FormRegistryEngine(inst_OrbitRegistry);
             inst_FormRegistryEngine.MdiParent = this;
+
+            inst_FormOrbitDiagnosticPlotter = new FormOrbitDiagnosticPlotter(inst_OrbitRegistry);
+            inst_FormOrbitDiagnosticPlotter.MdiParent = this;
         }
         #region Private Functions - Load Forms
         private void Load_Form_Instance(Form form)
@@ -113,10 +127,9 @@ namespace ED_TimeSlide
                 form.Activate();
             }
         }
-        #endregion
 
         #endregion
 
-
+        #endregion
     }
 }

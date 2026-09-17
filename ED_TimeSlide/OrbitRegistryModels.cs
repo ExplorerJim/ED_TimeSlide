@@ -19,7 +19,8 @@ namespace ED_TimeSlide
         public double AnchorDistance { get; set; }
 
         public string VerifiedSourceFile { get; set; }
-        public string SoftwareName { get; set; }
+        public string BodyName { get; set; }
+        public string SystemName { get; set; }
         public bool IsClimbingOutward { get; set; }
 
         public long LastCheckedTimestamp { get; set; }
@@ -43,7 +44,8 @@ namespace ED_TimeSlide
         public long Timestamp { get; set; }
         public double Distance { get; set; }
         public string SourceFile { get; set; }
-        public string SoftwareName { get; set; }
+        public string BodyName { get; set; }
+        public string SystemName { get; set; }
         public string UploaderId { get; set; }
     }
     #endregion

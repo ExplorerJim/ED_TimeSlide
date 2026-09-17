@@ -1,11 +1,8 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace ED_TimeSlide
@@ -13,15 +10,6 @@ namespace ED_TimeSlide
     public partial class FormRegistryEngine : Form
     {
         #region Variables
-        // Core Data Models
-        private Dictionary<string, MasterOrbitAnchor> masterRegistry =
-            new Dictionary<string, MasterOrbitAnchor>();
-        private Dictionary<string, StagingOrbitBlock> stagingRegistry =
-            new Dictionary<string, StagingOrbitBlock>();
-
-        // System Path Identifiers
-        private readonly string masterRegistryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Settings.MasterOrbitRegistryFileName);
-        private readonly string stagingRegistryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Settings.StagingOrbitRegistryFileName);
         private readonly string errorLogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Settings.ErrorLogFileName);
 
         // Operational Metric Counters
@@ -30,13 +18,20 @@ namespace ED_TimeSlide
         private string currentArchiveName = "";
 
         private BackgroundWorker preprocessingWorker;
+
+        private readonly StagingParserEngine stagingParser = new StagingParserEngine();
         #endregion
 
-        public FormRegistryEngine()
+        #region Instances
+        private OrbitRegistry inst_OrbitRegistry;
+        #endregion
+
+        public FormRegistryEngine(OrbitRegistry orbitRegistry)
         {
             InitializeComponent();
             InitializePreprocessingWorker();
-            LoadExistingRegistries();
+
+            inst_OrbitRegistry = orbitRegistry;
 
             //testing setup of ease
             txtFolderPath.Text = @"E:\Elite Dangerous\EDDN data\Raw Data\Scan\Test";
@@ -110,7 +105,7 @@ namespace ED_TimeSlide
             #region Get all files
             var allFiles = Directory.GetFiles(folderPath, "*.*")
                 .Where(f => f.EndsWith(".rar") || f.EndsWith(".bz2") || f.EndsWith(".jsonl"))
-                .Select(f => new { Path = f, Date = ExtractDateFromFilename(Path.GetFileName(f)) })
+                .Select(f => new { Path = f, Date = EddnLogProcessor.ExtractDateFromFilename(Path.GetFileName(f)) ?? "9999-12-31" })
                 .OrderBy(f => f.Date)
                 .ToList();
             #endregion
@@ -136,32 +131,22 @@ namespace ED_TimeSlide
                 worker.ReportProgress(percentage, $"Ingesting [{i + 1}/{totalFiles}]: {currentArchiveName}");
                 #endregion
 
-                #region Route File Based on Extension
-                if (file.Path.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase))
-                {
-                    ReadJsonlFileNative(file.Path);
-                }
-                else
-                {
-                    StreamCompressedArchive(file.Path);
-                }
-                #endregion
-
-                #region Update Log Display with Summary for file
-                UpdateLogDisplay($"Master registry has {masterRegistry.Count} records");
-                UpdateLogDisplay($"{stagingRegistry.Count} remain in staging record");
-                UpdateLogDisplay($"Skipped {skippedSystemsCount} systems due to validation failures");
+                #region Route File Based on Engine Processor
+                EddnLogProcessor.ProcessDataFile(file.Path, line => EvaluateAndRouteLine(line));
                 #endregion
             }
             #endregion
             #region Update Log Display with Summary for run
             UpdateLogDisplay("## Final Master Registry Summary #############################");
-            UpdateLogDisplay($"Final Master registry has {masterRegistry.Count} records");
-            UpdateLogDisplay($"{stagingRegistry.Count} remain in Final staging record");
-            UpdateLogDisplay($"Skipped {skippedSystemsCount} systems due to validation failures in total");
+            UpdateLogDisplay($"Master registry has {inst_OrbitRegistry.GetMasterCount()} records");
+            UpdateLogDisplay($"{inst_OrbitRegistry.GetStagingCount()} remain in staging record");
+            UpdateLogDisplay($"Skipped {skippedSystemsCount} systems due to validation failures");
             #endregion
             #region Finalization
             e.Result = $"Initialization Complete. Swept {processedLinesCount} log entries.";
+            #endregion
+            #region Save registries to disk
+            inst_OrbitRegistry.SaveRegistriesToDisk();
             #endregion
         }
         private void PreprocessingWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
@@ -173,9 +158,7 @@ namespace ED_TimeSlide
         }
         private void PreprocessingWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-            #region Save registries to disk
-            SaveRegistriesToDisk();
-            #endregion
+
 
             #region Update UI
             if (e.Result != null) 
@@ -195,24 +178,18 @@ namespace ED_TimeSlide
             if (!textLine.Contains("\"event\":\"Scan\"") && !textLine.Contains("\"event\": \"Scan\"")) return;
             #endregion
 
-            #region Deserialize and Evaluate line
-            try
-            {
-                #region Deserialize JSON line
-                var record = JsonConvert.DeserializeObject<EddnRecords>(textLine);
-                #endregion
+            #region Ingest and Route via Data Factory, Send the raw text to our factory. Errors will automatically pipe back to our log textbox.
+            var record = stagingParser.ParseScanLine(textLine, (error, details) => UpdateLogDisplay($"[INGESTION ERROR] {error}: {details}"));
 
-                #region Evaluate Scan Records
-                if (record?.Message != null && record.Message.EventName == "Scan")
+            if (record?.Message != null && record.Message.EventName == "Scan")
+            {
+                #region Section 3.3 Hierarchical Parent Validation Gate, Check if the body orbits the primary star directly before routing to staging memory
+                if (stagingParser.IsPrimaryStarOrbiter(record.Message, (error, details) => UpdateLogDisplay($"[INGESTION ERROR] {error}: {details}")))
                 {
                     EvaluateRecordAgainstStagingRegistry(record);
                 }
                 #endregion
-                #region Ignore Non-Scan Records
-                else { }
-                #endregion
             }
-            catch (JsonException) { }
             #endregion
         }
         private void EvaluateRecordAgainstStagingRegistry(EddnRecords record)
@@ -233,10 +210,12 @@ namespace ED_TimeSlide
             string basePlanetKey = $"{msg.SystemAddress}_{msg.BodyId}";
             long currentTimestampSeconds = msg.Timestamp.ToUnixSeconds();
             double currentDistance = msg.DistanceFromArrivalLS;
+            string bodyName = msg.BodyName;
+            string systemName = msg.StarSystem;
             #endregion
 
             #region Check for Existing Master Record
-            if (masterRegistry.ContainsKey(basePlanetKey)) return;
+            if (inst_OrbitRegistry.ContainsMasterKey(basePlanetKey)) return;
             #endregion
 
             #region Generate Staging Registry Key
@@ -255,18 +234,18 @@ namespace ED_TimeSlide
                     AnchorTimestamp = currentTimestampSeconds,
                     AnchorDistance = currentDistance,
                     VerifiedSourceFile = currentArchiveName,
-                    SoftwareName = record.Header?.SoftwareName ?? "UnknownTool",
+                    BodyName = record.Message.BodyName,
+                    SystemName = record.Message.StarSystem,
                     IsClimbingOutward = false,
                     LastCheckedTimestamp = currentTimestampSeconds
                 };
-
-                masterRegistry[basePlanetKey] = starAnchor;
+                inst_OrbitRegistry.CommitMasterAnchor(basePlanetKey ,starAnchor);
                 return;
             }
             #endregion
 
-            #region Get Staging Block or Create New
-            if (!stagingRegistry.TryGetValue(stagingLookupKey, out StagingOrbitBlock stagingBlock))
+            #region If no staging entry for this body add it to stageing
+            if (!inst_OrbitRegistry.TryGetStagingBlock(stagingLookupKey, out StagingOrbitBlock stagingBlock))
             {
                 stagingBlock = new StagingOrbitBlock
                 {
@@ -274,7 +253,29 @@ namespace ED_TimeSlide
                     Eccentricity = msg.Eccentricity,
                     OrbitalPeriod = msg.OrbitalPeriod
                 };
-                stagingRegistry[stagingLookupKey] = stagingBlock;
+                inst_OrbitRegistry.CommitStagingBlock(stagingLookupKey, stagingBlock);
+            }
+            #endregion
+
+            #region Version 1.26: Source-Isolated 1-Second Unique Timestamp Gate
+            // Verifies uniqueness by checking BOTH the timestamp and the uploader ID together
+            if (stagingBlock.CollectedPoints != null && stagingBlock.CollectedPoints.Count > 0)
+            {
+                bool isNetworkDuplicateRow = false;
+                for (int ptIdx = 0; ptIdx < stagingBlock.CollectedPoints.Count; ptIdx++)
+                {
+                    if (stagingBlock.CollectedPoints[ptIdx].Timestamp == currentTimestampSeconds && string.Equals(stagingBlock.CollectedPoints[ptIdx].UploaderId, uploaderId, StringComparison.Ordinal))
+                    {
+                        isNetworkDuplicateRow = true;
+                        break;
+                    }
+                }
+
+                if (isNetworkDuplicateRow)
+                {
+                    // True network double-pump from the same client: execute early return bypass
+                    return;
+                }
             }
             #endregion
 
@@ -284,7 +285,8 @@ namespace ED_TimeSlide
                 Timestamp = currentTimestampSeconds,
                 Distance = currentDistance,
                 SourceFile = currentArchiveName,
-                SoftwareName = record.Header?.SoftwareName ?? "UnknownTool",
+                BodyName = bodyName,
+                SystemName = systemName,
                 UploaderId = uploaderId
             });
             #endregion
@@ -295,13 +297,14 @@ namespace ED_TimeSlide
                 if (TryValidateStagingCluster(stagingBlock, out MasterOrbitAnchor verifiedAnchor, out _))
                 {
                     verifiedAnchor.LastCheckedTimestamp = verifiedAnchor.AnchorTimestamp;
-                    masterRegistry[basePlanetKey] = verifiedAnchor;
+                    inst_OrbitRegistry.CommitMasterAnchor(basePlanetKey, verifiedAnchor);
+
                 }
                 else
                 {
                     IncrementSkippedSystemsDiagnostics(record.Message.BodyName, "5 point cluster validation failed, more than 1 outlier");
                 }
-                stagingRegistry.Remove(stagingLookupKey);
+                inst_OrbitRegistry.CommitStagingBlock(stagingLookupKey, stagingBlock);
             }
             #endregion
         }
@@ -391,8 +394,9 @@ namespace ED_TimeSlide
                         OrbitalPeriod = stagingBlock.OrbitalPeriod,
                         AnchorTimestamp = candidateAnchor.Timestamp,
                         AnchorDistance = candidateAnchor.Distance,
+                        SystemName = candidateAnchor.SystemName,
                         VerifiedSourceFile = candidateAnchor.SourceFile,
-                        SoftwareName = candidateAnchor.SoftwareName,
+                        BodyName = candidateAnchor.BodyName,
                         IsClimbingOutward = !isStellarBody && dynamicIsClimbing
                     };
                     structuralOutliers = localOutliers;
@@ -401,55 +405,6 @@ namespace ED_TimeSlide
                 #endregion
             }
             return false;
-            #endregion
-        }
-        private void SaveRegistriesToDisk()
-        {
-            #region Try to Serialize Registries
-            try
-            {
-                #region Serialize Master Registry to Disk
-                using (StreamWriter sw = new StreamWriter(masterRegistryPath, false))
-                using (JsonTextWriter jw = new JsonTextWriter(sw))
-                {
-                    JsonSerializer serializer = new JsonSerializer { Formatting = Formatting.None };
-                    serializer.Serialize(jw, masterRegistry);
-                }
-                #endregion
-                #region Serialize Staging Registry to Disk
-                using (StreamWriter sw = new StreamWriter(stagingRegistryPath, false))
-                using (JsonTextWriter jw = new JsonTextWriter(sw))
-                {
-                    JsonSerializer serializer = new JsonSerializer { Formatting = Formatting.None };
-                    serializer.Serialize(jw, stagingRegistry);
-                }
-                #endregion
-            }
-            #endregion
-            #region Catch Serialization Exceptions
-            catch (Exception ex)
-            {
-                UpdateLogDisplay($"[ERROR] Serialization crash: {ex.Message}");
-            }
-            #endregion
-        }
-        private void LoadExistingRegistries()
-        {
-            #region Load Master Registry from Disk
-            if (File.Exists(masterRegistryPath))
-            {
-                string json = File.ReadAllText(masterRegistryPath);
-                masterRegistry = JsonConvert.DeserializeObject<Dictionary<string, MasterOrbitAnchor>>(json)
-                                 ?? new Dictionary<string, MasterOrbitAnchor>();
-            }
-            #endregion
-            #region Load Staging Registry from Disk
-            if (File.Exists(stagingRegistryPath))
-            {
-                string json = File.ReadAllText(stagingRegistryPath);
-                stagingRegistry = JsonConvert.DeserializeObject<Dictionary<string, StagingOrbitBlock>>(json)
-                                  ?? new Dictionary<string, StagingOrbitBlock>();
-            }
             #endregion
         }
         private void IncrementSkippedSystemsDiagnostics(string identifier, string failureCode)
@@ -470,121 +425,10 @@ namespace ED_TimeSlide
             #endregion
 
             #region Log Error to Disk
-            lock (masterRegistryPath)
+            lock (errorLogPath)
             {
                 File.AppendAllText(errorLogPath, $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} | Anchor: {identifier} | Failure: {failureCode}{Environment.NewLine}");
             }
-            #endregion
-        }
-        private void StreamCompressedArchive(string path)
-        {
-            #region Function Variables
-            string tempDir = "";
-            string[] filesToRead = new string[] { };
-            #endregion
-
-            #region Extract Compressed Archive Using WinRAR
-            try
-            {
-                #region Create Temporary Directory
-                tempDir = Path.Combine(Path.GetTempPath(), $"ED_Extract_{Guid.NewGuid()}");
-                Directory.CreateDirectory(tempDir);
-                #endregion
-                #region Configure Process Start Info for WinRAR
-                ProcessStartInfo startInfo = new ProcessStartInfo
-                {
-                    FileName = Settings.winRarExePath,
-                    Arguments = $"e -y -ibck \"{path}\" \"{tempDir}\\\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                #endregion
-                #region Update Log Display
-                UpdateLogDisplay("Extracting archive: " + Path.GetFileName(path));
-                #endregion
-                #region Start WinRAR Process and Wait for Completion
-                using (Process p = Process.Start(startInfo))
-                {
-                    p.WaitForExit();
-                }
-                #endregion
-                #region Check for Extracted Files
-                if (Directory.Exists(tempDir))
-                {
-                    filesToRead= Directory.GetFiles(tempDir, "*.*", SearchOption.AllDirectories);
-                    UpdateLogDisplay("Extracted files: " + filesToRead.Length);
-                }
-                else
-                {
-                    UpdateLogDisplay("Failed to extract archive: " + Path.GetFileName(path));
-                    return;
-                }
-                #endregion
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error processing {path}: {ex.Message}");
-            }
-            #endregion
-
-            #region Update Log Display
-            UpdateLogDisplay("Starting to process extracted files...");
-            #endregion
-
-            #region Read Each Line from Extracted Files and Evaluate
-            try
-            {
-                foreach (string file in filesToRead)
-                {
-                    if (new FileInfo(file).Length == 0) continue;
-
-                    foreach (string line in File.ReadLines(file))
-                    {
-                        processedLinesCount++;
-                        EvaluateAndRouteLine(line);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                UpdateLogDisplay($"Error processing {path}: {ex.Message}");
-            }
-            finally
-            {
-                if (!string.IsNullOrEmpty(tempDir) && Directory.Exists(tempDir))
-                {
-                    try 
-                    { 
-                        Directory.Delete(tempDir, true);
-                        UpdateLogDisplay("Temporary directory deleted.");
-                    } 
-                    catch 
-                    {
-                        UpdateLogDisplay("Failed to delete temporary directory: " + tempDir);
-                    }
-                }
-            }
-            #endregion
-        }
-        private void ReadJsonlFileNative(string path)
-        {
-            #region Read Each Line from the JSONL File
-            using (StreamReader reader = new StreamReader(path))
-            {
-                string line;
-                while ((line = reader.ReadLine()) != null)
-                {
-                    processedLinesCount++;
-                    EvaluateAndRouteLine(line);
-                }
-            }
-            #endregion
-        }
-        private string ExtractDateFromFilename(string filename)
-        {
-            #region Use Regex to Extract Date
-            var match = Regex.Match(filename, @"\d{4}-\d{2}-\d{2}");
-            return match.Success ? match.Value : "9999-12-31";
             #endregion
         }
         #endregion
