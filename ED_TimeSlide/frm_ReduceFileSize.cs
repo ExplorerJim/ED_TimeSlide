@@ -24,9 +24,6 @@ namespace ED_TimeSlide
 
         private void InitializeDefaultParameters()
         {
-            // Testing setup defaults
-            txb_InputFileNames.Text = @"E:\Elite Dangerous\EDDN data\Raw Data\Scan\Test\Journal.Scan - 2025 - 10 - 29.jsonl";
-            chk_MultiThreaded.Checked = true;
             _isProcessing = false;
         }
         #endregion

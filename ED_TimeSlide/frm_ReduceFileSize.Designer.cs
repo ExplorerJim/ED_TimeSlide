@@ -47,6 +47,8 @@
             // chk_MultiThreaded
             // 
             this.chk_MultiThreaded.AutoSize = true;
+            this.chk_MultiThreaded.Checked = true;
+            this.chk_MultiThreaded.CheckState = System.Windows.Forms.CheckState.Checked;
             this.chk_MultiThreaded.Location = new System.Drawing.Point(752, 161);
             this.chk_MultiThreaded.Name = "chk_MultiThreaded";
             this.chk_MultiThreaded.Size = new System.Drawing.Size(97, 17);

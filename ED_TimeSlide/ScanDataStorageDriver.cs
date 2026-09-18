@@ -1,12 +1,11 @@
-﻿using System;
-using System.IO;
-using System.Data;
+﻿using Microsoft.Data.Sqlite;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
-using System.Collections.Concurrent;
+using System.Windows.Forms;
 
 namespace ED_TimeSlide
 {
@@ -27,7 +26,7 @@ namespace ED_TimeSlide
         }
         #endregion
 
-        #region 1. Variables, Properties, and Class Fields
+        #region Variables
         private readonly BlockingCollection<EddnRecords> _ingestionQueue;
         private readonly CancellationToken _cancellationToken;
         private Task _consumerTask;
@@ -39,7 +38,6 @@ namespace ED_TimeSlide
         private const int BatchTimeoutMilliseconds = 1000;
         #endregion
 
-        #region 2. Initialization and Constructors
         public ScanDataStorageDriver(CancellationToken token)
         {
             _cancellationToken = token;
@@ -54,9 +52,146 @@ namespace ED_TimeSlide
             InitializeDatabaseStructure();
             StartConsumerPipeline();
         }
-        #endregion
 
-        #region 3. Private Initialization Logic
+        #region Public Functions
+        /// <summary> Places a parsed record into the bounded queue. Blocks automatically if the queue reaches its maximum RAM threshold. </summary> 
+        public void EnqueueRecord(EddnRecords record)
+        {
+            if (record == null || record.Message == null) return;
+
+            #region Remove star SystemName from Body Name if present
+            if (record.Message.BodyName.Contains(record.Message.StarSystem))
+            {
+                int index = record.Message.BodyName.IndexOf(record.Message.StarSystem);
+                record.Message.BodyName = (index < 0)
+                    ? record.Message.BodyName
+                    : record.Message.BodyName.Remove(index, record.Message.StarSystem.Length);
+                record.Message.BodyName = record.Message.BodyName.Trim();
+            }
+            #endregion           
+
+            try
+            {
+                _ingestionQueue.Add(record);
+            }
+            catch (InvalidOperationException ex)
+            {
+                LogErrorToDisk("EnqueueRecord_QueueClosed", ex);
+            }
+        }
+        /// <summary> Signal to the queue that no more records will be added. Allows the worker thread to finish remaining writes safely. </summary>
+        public void CompleteIngestion()
+        {
+            _ingestionQueue.CompleteAdding();
+            _consumerTask?.Wait();
+        }
+        /// <summary> Retrieves only the System and Body string names for verification. Bypasses the massive DataPoints table for near-instant execution. <summary>
+        public static CelestialMetadata GetCelestialMetadata(long systemEdId, long bodyEdId)
+        {
+            string connString = $"Data Source={Settings.ScanDataDbPath};Mode=ReadOnly;";
+            var meta = new CelestialMetadata { SystemName = Settings.UnknownData, BodyName = Settings.UnknownData };
+
+            using (var connection = new SqliteConnection(connString))
+            {
+                connection.Open();
+
+                using (var cmd = connection.CreateCommand())
+                {
+                    cmd.CommandText = @"
+                SELECT s.SystemName, b.BodyName
+                FROM Bodies b
+                JOIN StarSystems s ON b.SystemDBID = s.SystemDBID
+                WHERE s.SystemEDID = @sysEdId AND b.BodyEDID = @bodyEdId 
+                LIMIT 1;";
+
+                    cmd.Parameters.AddWithValue("@sysEdId", systemEdId);
+                    cmd.Parameters.AddWithValue("@bodyEdId", bodyEdId);
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            meta.SystemName = reader.IsDBNull(0) ? Settings.UnknownData : reader.GetString(0);
+                            meta.BodyName = reader.IsDBNull(1) ? Settings.UnknownData : reader.GetString(1);
+                        }
+                    }
+                }
+            }
+            return meta;
+        }
+        /// <summary> Extracts names and all data tracking timelines into high-performance flat double arrays. Converts internal Unix timestamps directly into native Excel OADate values. </summary>
+        public static CelestialDataset GetCelestialDataset(long systemEdId, long bodyEdId)
+        {
+            string connString = $"Data Source={Settings.ScanDataDbPath};Mode=ReadOnly;";
+
+            var dataset = new CelestialDataset();
+            dataset.Metadata = new CelestialMetadata { SystemName = Settings.UnknownData, BodyName = Settings.UnknownData };
+
+            var tempTimestamps = new List<double>();
+            var tempDistances = new List<double>();
+
+            using (var connection = new SqliteConnection(connString))
+            {
+                connection.Open();
+
+                using (var cmd = connection.CreateCommand())
+                {
+                    cmd.CommandText = @"
+                SELECT 
+                    s.SystemName, 
+                    b.BodyName, 
+                    d.Timestamp, 
+                    d.DistanceToArrival
+                FROM Bodies b
+                JOIN StarSystems s ON b.SystemDBID = s.SystemDBID
+                LEFT JOIN DataPoints d ON b.BodyDBID = d.BodyDBID
+                WHERE s.SystemEDID = @sysEdId AND b.BodyEDID = @bodyEdId
+                ORDER BY d.Timestamp ASC;";
+
+                    cmd.Parameters.AddWithValue("@sysEdId", systemEdId);
+                    cmd.Parameters.AddWithValue("@bodyEdId", bodyEdId);
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        bool namesAssigned = false;
+
+                        while (reader.Read())
+                        {
+                            // 1. Assign metadata names once from the first available record row
+                            if (!namesAssigned)
+                            {
+                                dataset.Metadata.SystemName = reader.IsDBNull(0) ? Settings.UnknownData : reader.GetString(0);
+                                dataset.Metadata.BodyName = reader.IsDBNull(1) ? Settings.UnknownData : reader.GetString(1);
+                                namesAssigned = true;
+                            }
+
+                            // 2. Safely capture data point arrays if records exist
+                            if (!reader.IsDBNull(2) && !reader.IsDBNull(3))
+                            {
+                                long unixSeconds = reader.GetInt64(2);
+                                double distance = reader.GetDouble(3);
+
+                                // 3. Mathematical conversion from Unix timestamp to Excel Native OADate
+                                double excelOADate = DateTimeOffset.FromUnixTimeSeconds(unixSeconds)
+                                    .DateTime
+                                    .ToOADate();
+
+                                tempTimestamps.Add(excelOADate);
+                                tempDistances.Add(distance);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Hydrate high-performance primitives directly to avoid object overheads
+            dataset.ExcelOATimestamps = tempTimestamps.ToArray();
+            dataset.DistancesToArrival = tempDistances.ToArray();
+
+            return dataset;
+        }
+        #endregion
+        #region Private Functions
         private void InitializeDatabaseStructure()
         {
             string dbPath = Settings.ScanDataDbPath;
@@ -132,153 +267,6 @@ namespace ED_TimeSlide
                 }
             }
         }
-        #endregion
-        #region 4. Public Accessor Interfaces / Events
-        /// <summary>
-        /// Places a parsed record into the bounded queue.
-        /// Blocks automatically if the queue reaches its maximum RAM threshold.
-        /// </summary>
-        public void EnqueueRecord(EddnRecords record)
-        {
-            if (record == null || record.Message == null) return;
-
-            try
-            {
-                _ingestionQueue.Add(record);
-            }
-            catch (InvalidOperationException ex)
-            {
-                LogErrorToDisk("EnqueueRecord_QueueClosed", ex);
-            }
-        }
-        /// <summary>
-        /// Signal to the queue that no more records will be added.
-        /// Allows the worker thread to finish remaining writes safely.
-        /// </summary>
-        public void CompleteIngestion()
-        {
-            _ingestionQueue.CompleteAdding();
-            _consumerTask?.Wait();
-        }
-        #region Read-Only Metadata Extraction
-        /// <summary>
-        /// Retrieves only the System and Body string names for verification.
-        /// Bypasses the massive DataPoints table for near-instant execution.
-        /// </summary>
-        public static CelestialMetadata GetCelestialMetadata(long systemEdId, long bodyEdId)
-        {
-            string connString = $"Data Source={Settings.ScanDataDbPath};Mode=ReadOnly;";
-            var meta = new CelestialMetadata { SystemName = Settings.UnknownData, BodyName = Settings.UnknownData };
-
-            using (var connection = new SqliteConnection(connString))
-            {
-                connection.Open();
-
-                using (var cmd = connection.CreateCommand())
-                {
-                    cmd.CommandText = @"
-                SELECT s.SystemName, b.BodyName
-                FROM Bodies b
-                JOIN StarSystems s ON b.SystemDBID = s.SystemDBID
-                WHERE s.SystemEDID = @sysEdId AND b.BodyEDID = @bodyEdId 
-                LIMIT 1;";
-
-                    cmd.Parameters.AddWithValue("@sysEdId", systemEdId);
-                    cmd.Parameters.AddWithValue("@bodyEdId", bodyEdId);
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            meta.SystemName = reader.IsDBNull(0) ? Settings.UnknownData : reader.GetString(0);
-                            meta.BodyName = reader.IsDBNull(1) ? Settings.UnknownData : reader.GetString(1);
-                        }
-                    }
-                }
-            }
-            return meta;
-        }
-        #region Read-Only Telemetry Dataset Extraction
-        /// <summary>
-        /// Extracts names and all data tracking timelines into high-performance flat double arrays.
-        /// Converts internal Unix timestamps directly into native Excel OADate values.
-        /// </summary>
-        public static CelestialDataset GetCelestialDataset(long systemEdId, long bodyEdId)
-        {
-            string connString = $"Data Source={Settings.ScanDataDbPath};Mode=ReadOnly;";
-
-            var dataset = new CelestialDataset();
-            dataset.Metadata = new CelestialMetadata { SystemName = Settings.UnknownData, BodyName = Settings.UnknownData };
-
-            var tempTimestamps = new List<double>();
-            var tempDistances = new List<double>();
-
-            using (var connection = new SqliteConnection(connString))
-            {
-                connection.Open();
-
-                using (var cmd = connection.CreateCommand())
-                {
-                    cmd.CommandText = @"
-                SELECT 
-                    s.SystemName, 
-                    b.BodyName, 
-                    d.Timestamp, 
-                    d.DistanceToArrival
-                FROM Bodies b
-                JOIN StarSystems s ON b.SystemDBID = s.SystemDBID
-                LEFT JOIN DataPoints d ON b.BodyDBID = d.BodyDBID
-                WHERE s.SystemEDID = @sysEdId AND b.BodyEDID = @bodyEdId
-                ORDER BY d.Timestamp ASC;";
-
-                    cmd.Parameters.AddWithValue("@sysEdId", systemEdId);
-                    cmd.Parameters.AddWithValue("@bodyEdId", bodyEdId);
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        bool namesAssigned = false;
-
-                        while (reader.Read())
-                        {
-                            // 1. Assign metadata names once from the first available record row
-                            if (!namesAssigned)
-                            {
-                                dataset.Metadata.SystemName = reader.IsDBNull(0) ? Settings.UnknownData : reader.GetString(0);
-                                dataset.Metadata.BodyName = reader.IsDBNull(1) ? Settings.UnknownData : reader.GetString(1);
-                                namesAssigned = true;
-                            }
-
-                            // 2. Safely capture data point arrays if records exist
-                            if (!reader.IsDBNull(2) && !reader.IsDBNull(3))
-                            {
-                                long unixSeconds = reader.GetInt64(2);
-                                double distance = reader.GetDouble(3);
-
-                                // 3. Mathematical conversion from Unix timestamp to Excel Native OADate
-                                double excelOADate = DateTimeOffset.FromUnixTimeSeconds(unixSeconds)
-                                    .DateTime
-                                    .ToOADate();
-
-                                tempTimestamps.Add(excelOADate);
-                                tempDistances.Add(distance);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 4. Hydrate high-performance primitives directly to avoid object overheads
-            dataset.ExcelOATimestamps = tempTimestamps.ToArray();
-            dataset.DistancesToArrival = tempDistances.ToArray();
-
-            return dataset;
-        }
-        #endregion
-
-        #endregion
-
-        #endregion
-        #region 5. Private Processing Functions / Internal Logic
         private void StartConsumerPipeline()
         {
             _consumerTask = Task.Run(
@@ -387,7 +375,6 @@ namespace ED_TimeSlide
                 }
             }
         }
-
         private long GetOrCreateCachedSystem(SqliteConnection conn, SqliteTransaction trans, ScanMessage msg)
         {
             // Cache Layer Hit: Skips the database query entirely
@@ -468,8 +455,6 @@ namespace ED_TimeSlide
                 cmd.ExecuteNonQuery();
             }
         }
-        #endregion
-        #region 6. Exploded Diagnostic Error Catching
         private void LogErrorToDisk(string context, Exception ex)
         {
             try
@@ -495,9 +480,6 @@ namespace ED_TimeSlide
                 // TODO: Fail-safe path if logging directory permissions collapse
             }
         }
-        #endregion
-
-        #region 7. Interface Resource Reclamation
         public void Dispose()
         {
             if (_isDisposed) return;

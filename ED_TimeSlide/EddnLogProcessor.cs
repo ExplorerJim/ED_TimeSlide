@@ -161,6 +161,15 @@ namespace ED_TimeSlide
                     if (record.Message.StarType != null &&
                         record.Message.DistanceFromArrivalLS <= Settings.MinStellarDistanceForStars)
                     {
+                        if(record.Message.BodyName.Contains(record.Message.StarSystem))
+                        {
+                            int index = record.Message.BodyName.IndexOf(record.Message.StarSystem);
+                            record.Message.BodyName = (index < 0)
+                                ? record.Message.BodyName
+                                : record.Message.BodyName.Remove(index, record.Message.StarSystem.Length);
+                            record.Message.BodyName = record.Message.BodyName.Trim();
+                        }
+                        
                         return;
                     }
 

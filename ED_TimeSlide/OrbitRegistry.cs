@@ -1,10 +1,12 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using OpenTK.Input;
+using ScottPlot.Colormaps;
+using ScottPlot.Interactivity;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Remoting.Lifetime;
-using Newtonsoft.Json;
-using OpenTK.Input;
-using ScottPlot.Interactivity;
+using System.Windows.Forms;
 
 namespace ED_TimeSlide
 {
@@ -100,6 +102,66 @@ namespace ED_TimeSlide
             }
         }
 
+        public void GetMasterKeys(out List<string> keys)
+        {
+            lock (registryLock)
+            {
+                keys = new List<string>(masterRegistry.Keys);
+            }
+        }
+
+        public bool GetAllSystemAddressBodyID(out long[] systemAddresses, out long[] bodyIDs)
+        {
+            systemAddresses = null;
+            bodyIDs = null;
+            lock (registryLock)
+            {
+                try
+                {
+                    List<string> masterkeys = new List<string>(masterRegistry.Keys);
+
+                    systemAddresses = new long[masterkeys.Count];
+                    bodyIDs = new long[masterkeys.Count];
+                    string[] temp;
+
+                    for (int k = 0; k < masterkeys.Count; k++)
+                    {
+                        temp = masterkeys[k].Split('_');
+                        if (temp.Length == 2)
+                        {
+                            systemAddresses[k] = Convert.ToInt64(temp[0]);
+                            bodyIDs[k] = Convert.ToInt64(temp[1]);
+                        }
+                        else
+                        {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+        }
+        public bool SplitKeyintoIDs(string key, out long systemID, out long bodyID)
+        {
+            systemID = -1;
+            bodyID = -1;
+
+            string[] temp = key.Split('_');
+            if (temp.Length == 2)
+            {
+                systemID = Convert.ToInt64(temp[0]);
+                bodyID = Convert.ToInt64(temp[1]);
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
         public bool ContainsMasterKey(string basePlanetKey)
         {
             lock (registryLock)

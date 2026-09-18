@@ -114,26 +114,27 @@ namespace ED_TimeSlide
             lblPlotterStatus.Text = $"[LOADING] Byte seeking flat log records for: {cmbPlanetSelector.SelectedItem}...";
             #endregion
 
-            #region Execute High-Speed Alphabetical Seek Hop Using Real Strings
-            try
-            {
-                var flatTelemetryRecords = ParseFlatTelemetryLinesViaByteSeek(
-                    masterEddFilePath,
-                    anchor.SystemName,
-                    anchor.BodyName);
-
-                #region Pass Mapped Arrays Down to ScottPlot Renderer Engine
-                RenderOrbitDiagnosticCanvas(anchor, flatTelemetryRecords, targetRegistryKey);
-                #endregion
+            #region Collect Data points from scanDB
+            long systemAddress = -1;
+            long bodyID = -1;
+            if(inst_OrbitRegistry.SplitKeyintoIDs(targetRegistryKey, out systemAddress, out bodyID))
+            { 
+                CelestialDataset dataset = ScanDataStorageDriver.GetCelestialDataset(systemAddress, bodyID);
+                if ((dataset.Metadata.SystemName != Settings.UnknownData) && (dataset.Metadata.BodyName != Settings.UnknownData)
+                    && (dataset.DistancesToArrival.Length > 0) && (dataset.ExcelOATimestamps.Length > 0))
+                {
+                    RenderOrbitDiagnosticCanvas(anchor, dataset.ExcelOATimestamps, dataset.DistancesToArrival, targetRegistryKey);
+                }
+                else
+                {
+                    lblPlotterStatus.Text = $"[ERROR] Interface Chart Render Fault: No data avalible in DB for this body";
+                }
+                
             }
-            catch (Exception ex)
+            else
             {
-                lblPlotterStatus.Text = $"[ERROR] Interface Chart Render Fault: {ex.Message}";
+                lblPlotterStatus.Text = $"[ERROR] Interface Chart Render Fault: Could not get systemAddress and BodyID from orbitRegistry";
             }
-            #endregion
-
-            #region Collect system name and body name from scan database
-            // TODO: CelestialDataset dataset = ScanDataStorageDriver.GetCelestialDataset(targetSystemEdId, targetBodyEdId);
             #endregion
         }
 
@@ -176,37 +177,27 @@ namespace ED_TimeSlide
         }
         #endregion
         #endregion
-        private void RenderOrbitDiagnosticCanvas(MasterOrbitAnchor anchor, List<string> flatTelemetryLines, string activeRegistryKey, ScottPlot.AxisLimits? preservedZoomLimits = null)
+        private void RenderOrbitDiagnosticCanvas(MasterOrbitAnchor anchor, double[] dbTimestamp, double[] dbDistanceToArrival, string activeRegistryKey, ScottPlot.AxisLimits? preservedZoomLimits = null)
         {
             #region Guard Matrix Checks for Missing Components or Models
-            if (anchor == null || flatTelemetryLines == null || flatTelemetryLines.Count == 0) return;
+            if (anchor == null || dbTimestamp == null || dbTimestamp.Length == 0 || dbDistanceToArrival == null || dbDistanceToArrival.Length == 0 
+                || dbDistanceToArrival.Length != dbTimestamp.Length) return;
             #endregion
-            #region Setup In-Memory Observation Datasets Arrays
-            int totalPointsCount = flatTelemetryLines.Count;
-            double[] observationTimestampsX = new double[totalPointsCount];
-            double[] observationDistancesY = new double[totalPointsCount];
 
+            #region Setup In-Memory Observation Datasets Arrays
+            int totalPointsCount = dbTimestamp.Length;
             double minimumTimestampX = double.MaxValue;
             double maximumTimestampX = double.MinValue;
             #endregion
+
             #region Pass 1: Parse Flat Telemetry Matrix Primitives from Disk
             for (int i = 0; i < totalPointsCount; i++)
             {
-                string[] columnTokens = flatTelemetryLines[i].Split(',');
-                if (columnTokens.Length < 4) continue;
-
-                #region Perform Numeric Mapping Coordinate Translations
-                double excelFractionalDate = double.Parse(columnTokens[2]);
-                double observedDistanceLS = double.Parse(columnTokens[3]);
-
-                observationTimestampsX[i] = excelFractionalDate;
-                observationDistancesY[i] = observedDistanceLS;
-
-                if (excelFractionalDate < minimumTimestampX) minimumTimestampX = excelFractionalDate;
-                if (excelFractionalDate > maximumTimestampX) maximumTimestampX = excelFractionalDate;
-                #endregion
+                if (dbTimestamp[i] < minimumTimestampX) minimumTimestampX = dbTimestamp[i];
+                if (dbTimestamp[i] > maximumTimestampX) maximumTimestampX = dbTimestamp[i];
             }
             #endregion
+
             #region Pass 2: Calculate Continuous Kepler Trajectory Step Vectors
             double plotStartX = minimumTimestampX - Settings.PaddingTimeCushion;
             double plotEndX = maximumTimestampX + Settings.PaddingTimeCushion;
@@ -268,13 +259,13 @@ namespace ED_TimeSlide
             for (int i = 0; i < totalPointsCount; i++)
             {
                 #region Compute Real Versus Predicted Geometric Drift Offset
-                long conversionTargetSeconds = (long)(observationTimestampsX[i] * 86400.0);
+                long conversionTargetSeconds = (long)(dbTimestamp[i] * 86400.0);
 
                 double predictedDistanceLS = KeplerOrbitSolver.PredictDistanceAtTimestamp(
                     physicalElements,
                     conversionTargetSeconds);
 
-                double calculationVarianceLS = Math.Abs(observationDistancesY[i] - predictedDistanceLS);
+                double calculationVarianceLS = Math.Abs(dbDistanceToArrival[i] - predictedDistanceLS);
 
                 double calculationVariancePercent = (predictedDistanceLS > 0.0)
                     ? (calculationVarianceLS / predictedDistanceLS) * 100.0
@@ -290,8 +281,8 @@ namespace ED_TimeSlide
                 #region Pass 3.5: Threshold Sorting and Clean Deviation Ingestion
                 if (calculationVariancePercent <= Settings.MaxAllowedErrorPercent)
                 {
-                    cleanPointsX.Add(observationTimestampsX[i]);
-                    cleanPointsY.Add(observationDistancesY[i]);
+                    cleanPointsX.Add(dbTimestamp[i]);
+                    cleanPointsY.Add(dbDistanceToArrival[i]);
 
                     // Version 1.16: Outlier filter gate prevents anomalies from poisoning bands
                     if (calculationVarianceLS > absoluteMaximumDeviationLS)
@@ -301,8 +292,8 @@ namespace ED_TimeSlide
                 }
                 else
                 {
-                    anomalyPointsX.Add(observationTimestampsX[i]);
-                    anomalyPointsY.Add(observationDistancesY[i]);
+                    anomalyPointsX.Add(dbTimestamp[i]);
+                    anomalyPointsY.Add(dbDistanceToArrival[i]);
                 }
                 #endregion
             }
@@ -518,16 +509,31 @@ namespace ED_TimeSlide
 
                 if (inst_OrbitRegistry.TryGetMasterAnchor(activeKey, out MasterOrbitAnchor anchor))
                 {
-                    // Extracts the exact current active zoom focus rectangle from the screen
+                    #region Extracts the exact current active zoom focus rectangle from the screen
                     ScottPlot.AxisLimits activeZoomLimits = formsPlotCanvas.Plot.Axes.GetLimits();
+                    #endregion
 
-                    var flatTelemetryRecords = ParseFlatTelemetryLinesViaByteSeek(
-                        masterEddFilePath,
-                        anchor.SystemName,
-                        anchor.BodyName);
-
-                    // Version 1.17: Passes the active zoom dimensions down to protect the view range
-                    RenderOrbitDiagnosticCanvas(anchor, flatTelemetryRecords, activeKey, activeZoomLimits);
+                    #region Collect Data points from scanDB
+                    long systemAddress = -1;
+                    long bodyID = -1;
+                    if (inst_OrbitRegistry.SplitKeyintoIDs(activeKey, out systemAddress, out bodyID))
+                    {
+                        CelestialDataset dataset = ScanDataStorageDriver.GetCelestialDataset(systemAddress, bodyID);
+                        if ((dataset.Metadata.SystemName != Settings.UnknownData) && (dataset.Metadata.BodyName != Settings.UnknownData)
+                            && (dataset.DistancesToArrival.Length > 0) && (dataset.ExcelOATimestamps.Length > 0))
+                        {
+                            RenderOrbitDiagnosticCanvas(anchor, dataset.ExcelOATimestamps, dataset.DistancesToArrival, activeKey, activeZoomLimits);
+                        }
+                        else
+                        {
+                            lblPlotterStatus.Text = $"[ERROR] Interface Chart Render Fault: No data avalible in DB for this body, cause 2";
+                        }
+                    }
+                    else
+                    {
+                        lblPlotterStatus.Text = $"[ERROR] Interface Chart Render Fault: Could not get systemAddress and BodyID from orbitRegistry, casue 2";
+                    }
+                    #endregion
                 }
             }
             #endregion
@@ -744,96 +750,5 @@ namespace ED_TimeSlide
             }
             #endregion
         }
-        private List<string> ParseFlatTelemetryLinesViaByteSeek(string eddPath, string targetSystem, string targetBody)
-        {
-            var extractedMatches = new List<string>();
-
-            #region Guard Matrix Checks for Missing Files or Targets
-            if (!isFileIndexMapLoaded || string.IsNullOrWhiteSpace(targetSystem))
-            {
-                return extractedMatches;
-            }
-            #endregion
-
-            #region Extract Alphabet Token and Query Memory Byte Offset Map
-            char alphabetKey = char.ToUpper(targetSystem[0]);
-            if (!alphabetByteOffsets.TryGetValue(alphabetKey, out long targetBytePosition))
-            {
-                return extractedMatches;
-            }
-            #endregion
-
-            #region Execute High-Speed Stream Hop Pointer Jump
-            try
-            {
-                using (var fs = new FileStream(eddPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                using (var reader = new StreamReader(fs))
-                {
-                    fs.Seek(targetBytePosition, SeekOrigin.Begin);
-                    reader.DiscardBufferedData();
-
-                    string currentLine;
-                    while ((currentLine = reader.ReadLine()) != null)
-                    {
-                        string[] dataTokens = currentLine.Split(',');
-                        if (dataTokens.Length < 4) continue;
-
-                        string rowSystem = dataTokens[0].Trim();
-                        string rowBody = dataTokens[1].Trim();
-
-                        #region Terminate Scan Immediately If Alphabet Group Out-Swings Target
-                        if (rowSystem.Length > 0 && char.ToUpper(rowSystem[0]) != alphabetKey)
-                        {
-                            break;
-                        }
-                        #endregion
-
-                        #region Unpack and Reconstruct Horizontal Telemetry Pairs Into Vertical Rows
-                        if (string.Equals(rowSystem, targetSystem, StringComparison.OrdinalIgnoreCase) &&
-                            string.Equals(rowBody, targetBody, StringComparison.OrdinalIgnoreCase))
-                        {
-                            #region Loop Horizontally Across Trailing Coordinate Pairs
-                            for (int i = 2; i < dataTokens.Length - 1; i += 2)
-                            {
-                                string rawTimestampToken = dataTokens[i].Trim();
-                                string rawDistanceToken = dataTokens[i + 1].Trim();
-
-                                if (!string.IsNullOrWhiteSpace(rawTimestampToken) &&
-                                    !string.IsNullOrWhiteSpace(rawDistanceToken))
-                                {
-                                    #region Fabricate Sterile Standard Line Signature
-                                    string fabricatedVerticalLine = $"{rowSystem},{rowBody},{rawTimestampToken},{rawDistanceToken}";
-                                    extractedMatches.Add(fabricatedVerticalLine);
-                                    #endregion
-                                }
-                            }
-                            #endregion
-
-                            break;
-                        }
-                        #endregion
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                lblPlotterStatus.Text = $"[ERROR] High-Speed Seek Fault: {ex.Message}";
-            }
-            #endregion
-
-            return extractedMatches;
-        }
-    }
-}
-public class PlanetSelectorDisplayItem
-{
-    public string RegistryKey { get; set; }
-    public string DisplayName { get; set; }
-    public string SystemName { get; set; }
-    public string BodyName { get; set; }
-
-    public override string ToString()
-    {
-        return DisplayName; // This is what the user visually sees inside the dropdown list
     }
 }
