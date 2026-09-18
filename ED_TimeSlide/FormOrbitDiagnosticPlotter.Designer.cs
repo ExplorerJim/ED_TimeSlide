@@ -16,8 +16,6 @@
         #region Windows Form Designer Generated Code
         private void InitializeComponent()
         {
-            this.txtFolderPath = new System.Windows.Forms.TextBox();
-            this.btnSelectEddFolder = new System.Windows.Forms.Button();
             this.cmbPlanetSelector = new System.Windows.Forms.ComboBox();
             this.btnPreviousPlanet = new System.Windows.Forms.Button();
             this.btnNextPlanet = new System.Windows.Forms.Button();
@@ -28,31 +26,15 @@
             this.rdoZoomXOnly = new System.Windows.Forms.RadioButton();
             this.rdoZoomStandard = new System.Windows.Forms.RadioButton();
             this.BtnUpdateRender = new System.Windows.Forms.Button();
+            this.txtFolderPath = new System.Windows.Forms.TextBox();
             this.groupBox1.SuspendLayout();
             this.SuspendLayout();
-            // 
-            // txtFolderPath
-            // 
-            this.txtFolderPath.Location = new System.Drawing.Point(12, 12);
-            this.txtFolderPath.Name = "txtFolderPath";
-            this.txtFolderPath.Size = new System.Drawing.Size(560, 20);
-            this.txtFolderPath.TabIndex = 0;
-            // 
-            // btnSelectEddFolder
-            // 
-            this.btnSelectEddFolder.Location = new System.Drawing.Point(578, 10);
-            this.btnSelectEddFolder.Name = "btnSelectEddFolder";
-            this.btnSelectEddFolder.Size = new System.Drawing.Size(140, 23);
-            this.btnSelectEddFolder.TabIndex = 1;
-            this.btnSelectEddFolder.Text = "Select Master Database";
-            this.btnSelectEddFolder.UseVisualStyleBackColor = true;
-            this.btnSelectEddFolder.Click += new System.EventHandler(this.BtnSelectEddFolder_Click);
             // 
             // cmbPlanetSelector
             // 
             this.cmbPlanetSelector.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbPlanetSelector.FormattingEnabled = true;
-            this.cmbPlanetSelector.Location = new System.Drawing.Point(12, 45);
+            this.cmbPlanetSelector.Location = new System.Drawing.Point(12, 22);
             this.cmbPlanetSelector.Name = "cmbPlanetSelector";
             this.cmbPlanetSelector.Size = new System.Drawing.Size(414, 21);
             this.cmbPlanetSelector.TabIndex = 2;
@@ -60,9 +42,9 @@
             // 
             // btnPreviousPlanet
             // 
-            this.btnPreviousPlanet.Location = new System.Drawing.Point(432, 43);
+            this.btnPreviousPlanet.Location = new System.Drawing.Point(432, 11);
             this.btnPreviousPlanet.Name = "btnPreviousPlanet";
-            this.btnPreviousPlanet.Size = new System.Drawing.Size(140, 23);
+            this.btnPreviousPlanet.Size = new System.Drawing.Size(140, 40);
             this.btnPreviousPlanet.TabIndex = 3;
             this.btnPreviousPlanet.Text = "◀ Previous Planet";
             this.btnPreviousPlanet.UseVisualStyleBackColor = true;
@@ -70,9 +52,9 @@
             // 
             // btnNextPlanet
             // 
-            this.btnNextPlanet.Location = new System.Drawing.Point(578, 43);
+            this.btnNextPlanet.Location = new System.Drawing.Point(578, 11);
             this.btnNextPlanet.Name = "btnNextPlanet";
-            this.btnNextPlanet.Size = new System.Drawing.Size(140, 23);
+            this.btnNextPlanet.Size = new System.Drawing.Size(140, 40);
             this.btnNextPlanet.TabIndex = 4;
             this.btnNextPlanet.Text = "Next Planet ▶";
             this.btnNextPlanet.UseVisualStyleBackColor = true;
@@ -93,9 +75,9 @@
             this.formsPlotCanvas.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.formsPlotCanvas.Location = new System.Drawing.Point(12, 72);
+            this.formsPlotCanvas.Location = new System.Drawing.Point(12, 57);
             this.formsPlotCanvas.Name = "formsPlotCanvas";
-            this.formsPlotCanvas.Size = new System.Drawing.Size(1008, 448);
+            this.formsPlotCanvas.Size = new System.Drawing.Size(1008, 463);
             this.formsPlotCanvas.TabIndex = 5;
             // 
             // groupBox1
@@ -103,7 +85,7 @@
             this.groupBox1.Controls.Add(this.rdoZoomYOnly);
             this.groupBox1.Controls.Add(this.rdoZoomXOnly);
             this.groupBox1.Controls.Add(this.rdoZoomStandard);
-            this.groupBox1.Location = new System.Drawing.Point(724, 10);
+            this.groupBox1.Location = new System.Drawing.Point(724, 6);
             this.groupBox1.Name = "groupBox1";
             this.groupBox1.Size = new System.Drawing.Size(203, 45);
             this.groupBox1.TabIndex = 7;
@@ -148,19 +130,27 @@
             // 
             // BtnUpdateRender
             // 
-            this.BtnUpdateRender.Location = new System.Drawing.Point(933, 12);
+            this.BtnUpdateRender.Location = new System.Drawing.Point(933, 11);
             this.BtnUpdateRender.Name = "BtnUpdateRender";
-            this.BtnUpdateRender.Size = new System.Drawing.Size(94, 45);
+            this.BtnUpdateRender.Size = new System.Drawing.Size(94, 40);
             this.BtnUpdateRender.TabIndex = 8;
             this.BtnUpdateRender.Text = "Update Render";
             this.BtnUpdateRender.UseVisualStyleBackColor = true;
             this.BtnUpdateRender.Click += new System.EventHandler(this.BtnUpdateRenderCanvas_Click);
+            // 
+            // txtFolderPath
+            // 
+            this.txtFolderPath.Location = new System.Drawing.Point(891, 524);
+            this.txtFolderPath.Name = "txtFolderPath";
+            this.txtFolderPath.Size = new System.Drawing.Size(100, 20);
+            this.txtFolderPath.TabIndex = 9;
             // 
             // FormOrbitDiagnosticPlotter
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1032, 561);
+            this.Controls.Add(this.txtFolderPath);
             this.Controls.Add(this.BtnUpdateRender);
             this.Controls.Add(this.groupBox1);
             this.Controls.Add(this.lblPlotterStatus);
@@ -168,8 +158,6 @@
             this.Controls.Add(this.btnNextPlanet);
             this.Controls.Add(this.btnPreviousPlanet);
             this.Controls.Add(this.cmbPlanetSelector);
-            this.Controls.Add(this.btnSelectEddFolder);
-            this.Controls.Add(this.txtFolderPath);
             this.MinimumSize = new System.Drawing.Size(800, 600);
             this.Name = "FormOrbitDiagnosticPlotter";
             this.Text = "Keplerian Rail Diagnostic Plotter Deck";
@@ -183,8 +171,6 @@
         #endregion
 
         #region Control Variable Handles Definitions
-        private System.Windows.Forms.TextBox txtFolderPath;
-        private System.Windows.Forms.Button btnSelectEddFolder;
         private System.Windows.Forms.ComboBox cmbPlanetSelector;
         private System.Windows.Forms.Button btnPreviousPlanet;
         private System.Windows.Forms.Button btnNextPlanet;
@@ -197,5 +183,6 @@
         private System.Windows.Forms.RadioButton rdoZoomXOnly;
         private System.Windows.Forms.RadioButton rdoZoomStandard;
         private System.Windows.Forms.Button BtnUpdateRender;
+        private System.Windows.Forms.TextBox txtFolderPath;
     }
 }

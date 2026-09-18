@@ -20,6 +20,7 @@ namespace ED_TimeSlide
         {
             InitializeComponent();
             InitializeDefaultParameters();
+            PurgeOrphanedDebugResources();
         }
 
         private void InitializeDefaultParameters()
@@ -181,7 +182,7 @@ namespace ED_TimeSlide
                             EddnLogProcessor.ProcessDataFile(currentFile, rawLine =>
                             {
                                 token.ThrowIfCancellationRequested();
-                                EddnLogProcessor.EvaluateAndRouteLine(rawLine, record =>
+                                EddnLogProcessor.ProcessEddnScanLine(rawLine, record =>
                                 {
                                     storageDriver.EnqueueRecord(record);
                                 });
@@ -217,7 +218,7 @@ namespace ED_TimeSlide
                         EddnLogProcessor.ProcessDataFile(currentFile, rawLine =>
                         {
                             if (token.IsCancellationRequested) return;
-                            EddnLogProcessor.EvaluateAndRouteLine(rawLine, record =>
+                            EddnLogProcessor.ProcessEddnScanLine(rawLine, record =>
                             {
                                 storageDriver.EnqueueRecord(record);
                             });
@@ -277,5 +278,62 @@ namespace ED_TimeSlide
             txb_Status.ScrollToCaret();
         }
         #endregion
+
+        #region Environment Maintenance Engine
+        /// <summary>
+        /// Safely terminates stuck background subprocesses and wipes
+        /// abandoned temporary extraction workspaces from prior debug runs.
+        /// </summary>
+        private void PurgeOrphanedDebugResources()
+        {
+            // 1. Force close lingering WinRAR processes from aborted runs
+            try
+            {
+                var localProcesses = System.Diagnostics.Process.GetProcesses();
+                foreach (var proc in localProcesses)
+                {
+                    if (proc.ProcessName.Equals("WinRAR", StringComparison.OrdinalIgnoreCase))
+                    {
+                        proc.Kill();
+                        proc.Dispose();
+                    }
+                }
+            }
+            catch
+            {
+                // Suppress permissions alerts on unmanaged system handles
+            }
+
+            // 2. Scan and shred orphaned temporary disk workspaces
+            try
+            {
+                string tempPath = Path.GetTempPath();
+                if (!Directory.Exists(tempPath)) return;
+
+                var directories = Directory.GetDirectories(
+                    tempPath,
+                    "ED_Extract_*",
+                    SearchOption.TopDirectoryOnly
+                );
+
+                foreach (string dir in directories)
+                {
+                    try
+                    {
+                        Directory.Delete(dir, true);
+                    }
+                    catch
+                    {
+                        // Skip files currently locked by active OS processes
+                    }
+                }
+            }
+            catch
+            {
+                // Fail-safe path if local temp folder permissions shift
+            }
+        }
+        #endregion
+
     }
 }

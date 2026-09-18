@@ -21,11 +21,6 @@ namespace ED_TimeSlide
         private Dictionary<string, StagingOrbitBlock> stagingRegistry = new Dictionary<string, StagingOrbitBlock>();
         #endregion
 
-        #region Read-Only Path Constants
-        private readonly string masterRegistryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Settings.MasterOrbitRegistryFileName);
-        private readonly string stagingRegistryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Settings.StagingOrbitRegistryFileName);
-        #endregion
-
         public OrbitRegistry()
         {
             // The dictionary structures are initialized as blank objects upon boot instantiation
@@ -37,11 +32,11 @@ namespace ED_TimeSlide
             lock (registryLock)
             {
                 #region Load Master Record Table
-                if (File.Exists(masterRegistryPath))
+                if (File.Exists(Settings.MasterOrbitRegistryPath))
                 {
                     try
                     {
-                        string json = File.ReadAllText(masterRegistryPath);
+                        string json = File.ReadAllText(Settings.MasterOrbitRegistryPath);
                         masterRegistry = JsonConvert.DeserializeObject<Dictionary<string, MasterOrbitAnchor>>(json)
                                          ?? new Dictionary<string, MasterOrbitAnchor>();
                     }
@@ -50,11 +45,11 @@ namespace ED_TimeSlide
                 #endregion
 
                 #region Load Staging Record Table
-                if (File.Exists(stagingRegistryPath))
+                if (File.Exists(Settings.StagingOrbitRegistryPath))
                 {
                     try
                     {
-                        string json = File.ReadAllText(stagingRegistryPath);
+                        string json = File.ReadAllText(Settings.StagingOrbitRegistryPath);
                         stagingRegistry = JsonConvert.DeserializeObject<Dictionary<string, StagingOrbitBlock>>(json)
                                           ?? new Dictionary<string, StagingOrbitBlock>();
                     }
@@ -71,7 +66,7 @@ namespace ED_TimeSlide
                 try
                 {
                     #region Stream Master Records to File
-                    using (StreamWriter sw = new StreamWriter(masterRegistryPath, false))
+                    using (StreamWriter sw = new StreamWriter(Settings.MasterOrbitRegistryPath))
                     using (JsonTextWriter jw = new JsonTextWriter(sw))
                     {
                         JsonSerializer serializer = new JsonSerializer { Formatting = Formatting.None };
@@ -80,7 +75,7 @@ namespace ED_TimeSlide
                     #endregion
 
                     #region Stream Staging Records to File
-                    using (StreamWriter sw = new StreamWriter(stagingRegistryPath, false))
+                    using (StreamWriter sw = new StreamWriter(Settings.StagingOrbitRegistryPath, false))
                     using (JsonTextWriter jw = new JsonTextWriter(sw))
                     {
                         JsonSerializer serializer = new JsonSerializer { Formatting = Formatting.None };

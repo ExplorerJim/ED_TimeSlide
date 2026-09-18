@@ -54,12 +54,9 @@ namespace ED_TimeSlide
             StreamReader sw;
             string[] temp_string_array = new string[0];
             string[] temp_string_array2 = new string[0];
-            ED_Data temp_data = new ED_Data();
-            DateTime temp_datetime = new DateTime();
             ED_Data_Point temp_datapoint = new ED_Data_Point();
             ED_Data_Body temp_body = new ED_Data_Body();
             ED_Data temp_starsystem = new ED_Data();
-
             string temp3 = "";
             int year = 0;
             int month = 0;
@@ -100,8 +97,7 @@ namespace ED_TimeSlide
                 while (!sw.EndOfStream)
                 {
                     temp_string = sw.ReadLine();
-                    temp_data = new ED_Data();
-
+                    
                     #region If string is not blank
                     if (temp_string != "")
                     {

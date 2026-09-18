@@ -59,25 +59,25 @@ namespace ED_TimeSlide
         {
             if (record == null || record.Message == null) return;
 
-            #region Remove star SystemName from Body Name if present
+            #region Throw and error if the systemName is in bodyName
             if (record.Message.BodyName.Contains(record.Message.StarSystem))
             {
-                int index = record.Message.BodyName.IndexOf(record.Message.StarSystem);
-                record.Message.BodyName = (index < 0)
-                    ? record.Message.BodyName
-                    : record.Message.BodyName.Remove(index, record.Message.StarSystem.Length);
-                record.Message.BodyName = record.Message.BodyName.Trim();
+                LogErrorToDisk("EnqueueRecord Incorect Body Name", $"BodyName contains the SystemName: {record.Message.BodyName}");
             }
-            #endregion           
-
-            try
+            #endregion
+            #region Add the record to the scanDB
+            else
             {
-                _ingestionQueue.Add(record);
+                try
+                {
+                    _ingestionQueue.Add(record);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    LogErrorToDisk("EnqueueRecord_QueueClosed", ex);
+                }
             }
-            catch (InvalidOperationException ex)
-            {
-                LogErrorToDisk("EnqueueRecord_QueueClosed", ex);
-            }
+            #endregion
         }
         /// <summary> Signal to the queue that no more records will be added. Allows the worker thread to finish remaining writes safely. </summary>
         public void CompleteIngestion()
@@ -467,13 +467,34 @@ namespace ED_TimeSlide
                     Directory.CreateDirectory(errorDir);
                 }
 
-                string filePath = Path.Combine(errorDir, "db_errors.txt");
                 string errorPayload = $"[{DateTime.UtcNow:s}] CONTEXT: {context}" + Environment.NewLine +
                                       $"ERROR: {ex.Message}" + Environment.NewLine +
                                       $"STACK: {ex.StackTrace}" + Environment.NewLine +
                                       new string('-', 60) + Environment.NewLine;
 
-                File.AppendAllText(filePath, errorPayload);
+                File.AppendAllText(Settings.DBErrorLogPath, errorPayload);
+            }
+            catch
+            {
+                // TODO: Fail-safe path if logging directory permissions collapse
+            }
+        }
+        private void LogErrorToDisk(string context, string error)
+        {
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string errorDir = Path.Combine(baseDir, "Data", "Errors");
+
+                if (!Directory.Exists(errorDir))
+                {
+                    Directory.CreateDirectory(errorDir);
+                }
+
+                string errorPayload = $"[{DateTime.UtcNow:s}] CONTEXT: {context}" + Environment.NewLine +
+                                      $"ERROR: {error}" + Environment.NewLine;
+
+                File.AppendAllText(Settings.DBErrorLogPath, errorPayload);
             }
             catch
             {

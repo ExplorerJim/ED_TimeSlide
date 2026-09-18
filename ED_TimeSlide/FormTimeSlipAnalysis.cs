@@ -24,16 +24,11 @@ namespace ED_TimeSlide
         private Dictionary<string, StagingOrbitBlock> stagingRegistry = new Dictionary<string, StagingOrbitBlock>();
         #endregion
 
-        #region Storage paths for the local registry state
-        private readonly string masterRegistryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Settings.MasterOrbitRegistryFileName);
-        #endregion
-
         #region Tracking variable to log which file is actively being scraped
         private string currentArchiveName = "";
         #endregion
 
         private readonly object fileLock = new object();
-        private readonly string anomaliesReportPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Settings.AnomaliesReportFileName);
 
         private BackgroundWorker analysisWorker;
 
@@ -550,9 +545,9 @@ namespace ED_TimeSlide
             #region Load registries from disk
             try
             {
-                if (File.Exists(masterRegistryPath))
+                if (File.Exists(Settings.MasterOrbitRegistryPath))
                 {
-                    string json = File.ReadAllText(masterRegistryPath);
+                    string json = File.ReadAllText(Settings.MasterOrbitRegistryPath);
                     masterRegistry = JsonConvert.DeserializeObject<Dictionary<string, MasterOrbitAnchor>>(json)
                                      ?? new Dictionary<string, MasterOrbitAnchor>();
                     UpdateLogDisplay($"Loaded {masterRegistry.Count} verified anchors from Master Registry.");
@@ -620,7 +615,7 @@ namespace ED_TimeSlide
 
                     #region Append the serialized anomaly payload to the anomalies report file, ensuring each entry is on a new line for easy parsing later
                     string jsonLine = JsonConvert.SerializeObject(anomalyPayload, Formatting.None) + Environment.NewLine;
-                    File.AppendAllText(anomaliesReportPath, jsonLine);
+                    File.AppendAllText(Settings.AnomaliesReportPath, jsonLine);
                     #endregion
                 }
                 #endregion

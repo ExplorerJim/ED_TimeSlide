@@ -10,8 +10,6 @@ namespace ED_TimeSlide
     public partial class FormRegistryEngine : Form
     {
         #region Variables
-        private readonly string errorLogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Settings.ErrorLogFileName);
-
         // Operational Metric Counters
         private int skippedSystemsCount = 0;
         private int processedLinesCount = 0;
@@ -66,9 +64,6 @@ namespace ED_TimeSlide
             processedLinesCount = 0;
             txbSkippedSystemsCounter.Text = "0";
             progressBarFiles.Value = 0;
-            #endregion
-            #region Delete Existing Error Log
-            if (File.Exists(errorLogPath)) File.Delete(errorLogPath);
             #endregion
             #region Get Target Folder Path
             string targetFolder = txtFolderPath.Text;
@@ -158,8 +153,6 @@ namespace ED_TimeSlide
         }
         private void PreprocessingWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-
-
             #region Update UI
             if (e.Result != null) 
                 UpdateLogDisplay(e.Result.ToString());
@@ -194,16 +187,16 @@ namespace ED_TimeSlide
         }
         private void EvaluateRecordAgainstStagingRegistry(EddnRecords record)
         {
-            #region Variables
+            #region Function Variables
             var msg = record.Message;
             #endregion
 
             #region Preliminary Filters
             if (msg.BodyId == 0) return; // Ignore primary suns            
-            if (msg.BodyName.Contains("Belt Cluster")) return; // Ignore belt clusters, as they are not valid orbital bodies
-            if (msg.BodyName.Contains("Ring Cluster")) return; // Ignore ring clusters, as they are not valid orbital bodies
+            //if (msg.BodyName.Contains(Settings.FilterBeltCluster)) return; // Ignore belt clusters, as they are not valid orbital bodies
+            //if (msg.BodyName.Contains(Settings.FilterRingCluster)) return; // Ignore ring clusters, as they are not valid orbital bodies
             // DISTANCE GATE FILTER: Turn off secondary star noise and distant binary if the body sits close to the arrivalpoint 
-            if (msg.StarType != null && msg.DistanceFromArrivalLS <= Settings.MinStellarDistanceForStars) return;
+            //if (msg.StarType != null && msg.DistanceFromArrivalLS <= Settings.MinStellarDistanceForStars) return;
             #endregion
 
             #region Collect Key Variables
@@ -222,7 +215,8 @@ namespace ED_TimeSlide
             string uploaderId = record.Header?.UploaderId ?? "Anonymous";
             string stagingLookupKey = $"{basePlanetKey}_{uploaderId}";
             #endregion
-
+            
+            /*
             #region Directly Promote Stellar Bodies to Master Registry
             if (!string.IsNullOrEmpty(msg.StarType) || msg.OrbitalPeriod <= 0)
             {
@@ -243,6 +237,8 @@ namespace ED_TimeSlide
                 return;
             }
             #endregion
+            */
+            
 
             #region If no staging entry for this body add it to stageing
             if (!inst_OrbitRegistry.TryGetStagingBlock(stagingLookupKey, out StagingOrbitBlock stagingBlock))
@@ -257,7 +253,7 @@ namespace ED_TimeSlide
             }
             #endregion
 
-            #region Version 1.26: Source-Isolated 1-Second Unique Timestamp Gate
+            #region Source-Isolated 1-Second Unique Timestamp Gate
             // Verifies uniqueness by checking BOTH the timestamp and the uploader ID together
             if (stagingBlock.CollectedPoints != null && stagingBlock.CollectedPoints.Count > 0)
             {
@@ -298,13 +294,12 @@ namespace ED_TimeSlide
                 {
                     verifiedAnchor.LastCheckedTimestamp = verifiedAnchor.AnchorTimestamp;
                     inst_OrbitRegistry.CommitMasterAnchor(basePlanetKey, verifiedAnchor);
-
                 }
                 else
                 {
                     IncrementSkippedSystemsDiagnostics(record.Message.BodyName, "5 point cluster validation failed, more than 1 outlier");
                 }
-                inst_OrbitRegistry.CommitStagingBlock(stagingLookupKey, stagingBlock);
+                inst_OrbitRegistry.RemoveStagingBlock(stagingLookupKey);
             }
             #endregion
         }
@@ -425,9 +420,9 @@ namespace ED_TimeSlide
             #endregion
 
             #region Log Error to Disk
-            lock (errorLogPath)
+            lock (Settings.ErrorLogPath)
             {
-                File.AppendAllText(errorLogPath, $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} | Anchor: {identifier} | Failure: {failureCode}{Environment.NewLine}");
+                File.AppendAllText(Settings.ErrorLogPath, $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} | Anchor: {identifier} | Failure: {failureCode}{Environment.NewLine}");
             }
             #endregion
         }

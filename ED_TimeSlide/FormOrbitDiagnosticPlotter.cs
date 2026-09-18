@@ -16,18 +16,10 @@ namespace ED_TimeSlide
         #region Dedicated UI Field Variables
         private readonly OrbitRegistry inst_OrbitRegistry;
 
-        // Dictionary caching the exact file stream byte positions where letters begin
-        private readonly Dictionary<char, long> alphabetByteOffsets =
-            new Dictionary<char, long>();
-
-        private string masterEddFilePath = string.Empty;
-        private bool isFileIndexMapLoaded = false;
-
         private readonly StagingParserEngine stagingParser = new StagingParserEngine();
         private readonly List<string> parallelRegistryKeys = new List<string>();
 
         private enum AxisZoomMode { Standard2D, XTimeOnly, YDistanceOnly }
-        private AxisZoomMode currentZoomConstraint = AxisZoomMode.Standard2D;
         #endregion
 
         public FormOrbitDiagnosticPlotter(OrbitRegistry passedRegistry)
@@ -49,31 +41,10 @@ namespace ED_TimeSlide
             #endregion
         }
         #region User Interface Navigation Click Event Registries
-        private async void BtnSelectEddFolder_Click(object sender, EventArgs e)
-        {
-            #region Invoke File Selection Open Dialog Wrapper
-            using (OpenFileDialog ofd = new OpenFileDialog())
-            {
-                ofd.Filter = "Elite Dangerous Diagnostic Files (*.edd)|*.edd|Text Files (*.txt)|*.txt";
-                ofd.Title = "Select Consolidated Flat Telemetry Database File";
-
-                if (ofd.ShowDialog() == DialogResult.OK)
-                {
-                    masterEddFilePath = ofd.FileName;
-                    txtFolderPath.Text = masterEddFilePath;
-
-                    #region Asynchronously compile the high-speed alphabet byte index map
-                    await BuildAlphabeticalByteOffsetMapAsync(masterEddFilePath);
-                    #endregion
-                }
-            }
-            #endregion
-        }
         private void CmbPlanetSelector_SelectedIndexChanged(object sender, EventArgs e)
         {
             #region Guard Matrix Checks for Selection State Verification
             if (cmbPlanetSelector.SelectedItem == null) return;
-            if (string.IsNullOrWhiteSpace(masterEddFilePath) || !File.Exists(masterEddFilePath)) return;
             #endregion
 
             #region Extract Selected Index Coordinate Context
@@ -96,7 +67,6 @@ namespace ED_TimeSlide
             if (rdoZoomStandard != null && !rdoZoomStandard.Checked)
             {
                 rdoZoomStandard.Checked = true;
-                currentZoomConstraint = AxisZoomMode.Standard2D;
             }
             #endregion
 
@@ -127,7 +97,7 @@ namespace ED_TimeSlide
                 }
                 else
                 {
-                    lblPlotterStatus.Text = $"[ERROR] Interface Chart Render Fault: No data avalible in DB for this body";
+                    lblPlotterStatus.Text = $"[ERROR] Interface Chart Render Fault: No data avalible in ScanDB for this body";
                 }
                 
             }
@@ -205,16 +175,17 @@ namespace ED_TimeSlide
             #region Version 1.18: Dynamic Shift of the Kepler Interpolation Frame Range
             if (preservedZoomLimits.HasValue)
             {
-                // Extracts the exact current active zoom focus coordinates from screen limits
+                #region Extracts the exact current active zoom focus coordinates from screen limits
                 double visibleWindowXMin = preservedZoomLimits.Value.HorizontalRange.Min;
                 double visibleWindowXMax = preservedZoomLimits.Value.HorizontalRange.Max;
-
-                // Restricts interpolation boundaries strictly inside the zoom focus window box
+                #endregion
+                #region Restricts interpolation boundaries strictly inside the zoom focus window box
                 if (!double.IsNaN(visibleWindowXMin) && !double.IsNaN(visibleWindowXMax))
                 {
                     plotStartX = visibleWindowXMin;
                     plotEndX = visibleWindowXMax;
                 }
+                #endregion
             }
             #endregion
 
@@ -271,11 +242,12 @@ namespace ED_TimeSlide
                     ? (calculationVarianceLS / predictedDistanceLS) * 100.0
                     : 0.0;
 
-                // Tracks peak percentage drift across the entire log data array sweep
+                #region Tracks peak percentage drift across the entire log data array sweep
                 if (calculationVariancePercent > absoluteMaximumDeviationPercent)
                 {
                     absoluteMaximumDeviationPercent = calculationVariancePercent;
                 }
+                #endregion
                 #endregion
 
                 #region Pass 3.5: Threshold Sorting and Clean Deviation Ingestion
@@ -284,11 +256,12 @@ namespace ED_TimeSlide
                     cleanPointsX.Add(dbTimestamp[i]);
                     cleanPointsY.Add(dbDistanceToArrival[i]);
 
-                    // Version 1.16: Outlier filter gate prevents anomalies from poisoning bands
+                    #region Version 1.16: Outlier filter gate prevents anomalies from poisoning bands
                     if (calculationVarianceLS > absoluteMaximumDeviationLS)
                     {
                         absoluteMaximumDeviationLS = calculationVarianceLS;
                     }
+                    #endregion
                 }
                 else
                 {
@@ -335,14 +308,14 @@ namespace ED_TimeSlide
             }
             #endregion
 
-            // Version 1.22: Primary rail backup check guarantees non-zero bounds constraints
+            #region Version 1.22: Primary rail backup check guarantees non-zero bounds constraints
             if (totalEnvelopeMinY == double.MaxValue || totalEnvelopeMaxY == double.MinValue)
             {
                 totalEnvelopeMinY = curveExpectedDistancesY.Min();
                 totalEnvelopeMaxY = curveExpectedDistancesY.Max();
             }
             #endregion
-
+            #endregion
 
             #region Pass 4: Interpolate Smooth Curve Rail Nodes & Map Uniform Raw LS Variances
             for (int step = 0; step <= graphResolutionIntervals; step++)
@@ -598,102 +571,9 @@ namespace ED_TimeSlide
             if (!File.Exists(verifiedStartupPath)) return;
             #endregion
 
-            #region Synchronize Inbound Variable Handles and Trigger Indexer
-            masterEddFilePath = verifiedStartupPath;
-
-            // Execute the high-speed byte index compilation asynchronously on form initialization
-            await BuildAlphabeticalByteOffsetMapAsync(masterEddFilePath);
-            #endregion
-        }
-        private async Task BuildAlphabeticalByteOffsetMapAsync(string eddFilePath)
-        {
-            #region Guard Matrix Checks for Missing Master Sources
-            if (string.IsNullOrWhiteSpace(eddFilePath) || !File.Exists(eddFilePath)) return;
-            #endregion
-
-            #region Reset Active Memory Dictionaries and System State Flags
-            isFileIndexMapLoaded = false;
-            alphabetByteOffsets.Clear();
-            #endregion
-
-            #region Execute Asynchronous Background File Ingestion Stream Scan
-            await Task.Run(() =>
-            {
-                try
-                {
-                    using (var fs = new FileStream(eddFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                    using (var reader = new StreamReader(fs, System.Text.Encoding.UTF8))
-                    {
-                        // Version 1.15: Tracks bit-perfect file alignment ignoring StreamReader buffers
-                        long structuralLineByteTrackingOffset = 0;
-                        char currentActiveAlphabetMarker = '\0';
-
-                        string targetTextLine;
-                        while ((targetTextLine = reader.ReadLine()) != null)
-                        {
-                            #region Compute String Width in Bytes Plus Windows Line Breaks
-                            // Extract actual data row character footprint size matching UTF8 formatting
-                            int literalRowTextByteSize = System.Text.Encoding.UTF8.GetByteCount(targetTextLine);
-
-                            // Accounts for the 2 bytes consumed by Windows [CR][LF] (\r\n) line endings
-                            long overallLineByteSpanIncrement = (long)literalRowTextByteSize + 2;
-                            #endregion
-
-                            #region Skip Blank Rows and Strip Extraneous Whitespace
-                            if (string.IsNullOrWhiteSpace(targetTextLine))
-                            {
-                                structuralLineByteTrackingOffset += overallLineByteSpanIncrement;
-                                continue;
-                            }
-                            #endregion
-
-                            #region Inspect First Character Token for Alphabet Transition Triggers
-                            char initialRowCharacterToken = char.ToUpper(targetTextLine[0]);
-
-                            if (char.IsLetter(initialRowCharacterToken) &&
-                                initialRowCharacterToken != currentActiveAlphabetMarker)
-                            {
-                                #region Cache True Line Header Address of Alphabet Border
-                                currentActiveAlphabetMarker = initialRowCharacterToken;
-
-                                if (!alphabetByteOffsets.ContainsKey(currentActiveAlphabetMarker))
-                                {
-                                    alphabetByteOffsets.Add(
-                                        currentActiveAlphabetMarker,
-                                        structuralLineByteTrackingOffset);
-                                }
-                                #endregion
-                            }
-                            #endregion
-
-                            #region Accumulate Total Traversed Bytes to Lock Next Row Address
-                            structuralLineByteTrackingOffset += overallLineByteSpanIncrement;
-                            #endregion
-                        }
-                    }
-
-                    isFileIndexMapLoaded = true;
-                }
-                catch (Exception ex)
-                {
-                    isFileIndexMapLoaded = false;
-                    alphabetByteOffsets.Clear();
-
-                    // Dispatches error messages securely to the UI status bar thread
-                    this.BeginInvoke(new Action(() =>
-                    {
-                        lblPlotterStatus.Text = $"[ERROR] Indexing failure: {ex.Message}";
-                    }));
-                }
-            });
-            #endregion
-
-            #region Return Ingestion Thread Frame Back to Idle Control
-            if (isFileIndexMapLoaded)
-            {
-                lblPlotterStatus.Text = "[IDLE] Master database indexed successfully. Ready.";
-                PopulatePlanetSelectionComboBox();
-            }
+            #region Populate combo box
+            lblPlotterStatus.Text = "[IDLE] ScanDB loaded. Ready.";
+            PopulatePlanetSelectionComboBox();
             #endregion
         }
         private void PopulatePlanetSelectionComboBox()
@@ -713,6 +593,7 @@ namespace ED_TimeSlide
             if (totalMasterRecords > 0)
             {
                 string[] masterKeysArray = inst_OrbitRegistry.GetMasterKeysSnapshot();
+                Array.Sort(masterKeysArray);
 
                 #region Synchronized Mapping Allocation Pass
                 foreach (string compositeKey in masterKeysArray)

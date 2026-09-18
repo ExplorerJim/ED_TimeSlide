@@ -1,6 +1,7 @@
 ﻿using ED_TimeSlide;
 using Newtonsoft.Json;
 using System;
+using System.Windows.Forms;
 
 namespace ED_TimeSlide
 {
@@ -91,17 +92,31 @@ namespace ED_TimeSlide
         /// Audits the parsed record parents hierarchy tree against the spec guidelines.
         /// Returns true if the body orbits the primary star directly.
         /// </summary>
-                #region Public Hierarchy Filtering Verification Suite
+        #region Public Hierarchy Filtering Verification Suite
         public bool IsPrimaryStarOrbiter(ScanMessage msg, Action<string, string> logErrorCallback)
         {
             #region Verify Entity Has Valid Property Allocations
             if (msg == null) return false;
             #endregion
 
+            #region If it's a primary star it has no parents
+            if (msg.Parents == null || msg.Parents.Length == 0)
+            {
+                return false;
+            }
+            #endregion
+
             #region Evaluate Master Root System Anchors
             if (msg.Parents == null || msg.Parents.Length == 0)
             {
                 return true;
+            }
+            #endregion
+
+            #region Evaluate Master Root System Anchors
+            if (msg.Parents.Length != 1)
+            {
+                return false;
             }
             #endregion
 

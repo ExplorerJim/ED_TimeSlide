@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 
 namespace ED_TimeSlide
@@ -126,10 +127,7 @@ namespace ED_TimeSlide
         #endregion
 
         #region Public Static Filename Parsing Utilities
-        /// <summary>
-        /// Scans an archive or file name string via regex constraints 
-        /// to isolate and extract the standardized upload date string (yyyy-MM-dd).
-        /// </summary>
+        /// <summary> Scans an archive or file name string via regex constraints to isolate and extract the standardized upload date string (yyyy-MM-dd). </summary>
         public static string ExtractDateFromFilename(string filename)
         {
             #region Regex Date Component Extraction
@@ -140,47 +138,61 @@ namespace ED_TimeSlide
             #endregion
         }
         #endregion
-
-        public static void EvaluateAndRouteLine(string textLine, Action<EddnRecords> successCallback)
+        /// <summary> 
+        /// Returns EddnRecord if line contains a body that fits the filter criteria.
+        /// Centralizes all string mutation layers safely before thread dispatch.
+        /// </summary>
+        public static void ProcessEddnScanLine(string textLine,Action<EddnRecords> successCallback)
         {
-            // Basic structural validation gate matching specification section 3.02.02
+            #region Basic structural validation gate matching specification section 3.02.02
             if (string.IsNullOrWhiteSpace(textLine)) return;
-            if (!textLine.Contains("\"event\":\"Scan\"") && !textLine.Contains("\"event\": \"Scan\"")) return;
+
+            bool containsScan = textLine.Contains("\"event\":\"Scan\"") ||
+                                textLine.Contains("\"event\": \"Scan\"");
+
+            if (!containsScan) return;
+            #endregion
 
             try
             {
-                var record = Newtonsoft.Json.JsonConvert.DeserializeObject<EddnRecords>(textLine);
+                #region Decode the EDDN line
+                var record = Newtonsoft.Json.JsonConvert
+                    .DeserializeObject<EddnRecords>(textLine);
+                #endregion
 
+                #region Scan message processing
                 if (record?.Message != null && record.Message.EventName == "Scan")
                 {
-                    // Execute validation filter parameters check
+                    #region Ignore: Primary Sun, Belt Clusters and Ring Cluster for now
                     if (record.Message.BodyId == 0) return;
-                    if (record.Message.BodyName.Contains("Belt Cluster")) return;
-                    if (record.Message.BodyName.Contains("Ring Cluster")) return;
+                    #endregion
 
-                    if (record.Message.StarType != null &&
-                        record.Message.DistanceFromArrivalLS <= Settings.MinStellarDistanceForStars)
+                    #region Centralized String Name Cleanup Gate
+                    string starSys = record.Message.StarSystem;
+                    string bodyName = record.Message.BodyName;
+
+                    if (!string.IsNullOrEmpty(bodyName) && !string.IsNullOrEmpty(starSys))
                     {
-                        if(record.Message.BodyName.Contains(record.Message.StarSystem))
+                        if (bodyName.Contains(starSys))
                         {
-                            int index = record.Message.BodyName.IndexOf(record.Message.StarSystem);
-                            record.Message.BodyName = (index < 0)
-                                ? record.Message.BodyName
-                                : record.Message.BodyName.Remove(index, record.Message.StarSystem.Length);
-                            record.Message.BodyName = record.Message.BodyName.Trim();
+                            int index = bodyName.IndexOf(starSys);
+                            if (index >= 0)
+                            {
+                                bodyName = bodyName.Remove(index, starSys.Length);
+                                record.Message.BodyName = bodyName.Trim();
+                            }
                         }
-                        
-                        return;
                     }
+                    #endregion
 
                     successCallback(record);
                 }
+                #endregion
             }
             catch
             {
                 // TODO: Handle or route corrupt line string logging profiles to \Data\Errors\
             }
         }
-
     }
 }

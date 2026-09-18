@@ -45,11 +45,11 @@
             this.menuStrip1.ImageScalingSize = new System.Drawing.Size(17, 17);
             this.menuStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.form2ToolStripMenuItem,
-            this.processingToolStripMenuItem,
-            this.journeyTrackerToolStripMenuItem,
             this.registryEngineToolStripMenuItem,
             this.fullAutomatedToolStripMenuItem,
-            this.toolsToolStripMenuItem});
+            this.toolsToolStripMenuItem,
+            this.processingToolStripMenuItem,
+            this.journeyTrackerToolStripMenuItem});
             this.menuStrip1.Location = new System.Drawing.Point(0, 0);
             this.menuStrip1.Name = "menuStrip1";
             this.menuStrip1.Size = new System.Drawing.Size(2092, 24);
@@ -59,8 +59,8 @@
             // form2ToolStripMenuItem
             // 
             this.form2ToolStripMenuItem.Name = "form2ToolStripMenuItem";
-            this.form2ToolStripMenuItem.Size = new System.Drawing.Size(102, 20);
-            this.form2ToolStripMenuItem.Text = "Reduce File Size";
+            this.form2ToolStripMenuItem.Size = new System.Drawing.Size(109, 20);
+            this.form2ToolStripMenuItem.Text = "Populate ScanDB";
             this.form2ToolStripMenuItem.Click += new System.EventHandler(this.form2ToolStripMenuItem_Click);
             // 
             // processingToolStripMenuItem
@@ -74,7 +74,7 @@
             // process1ToolStripMenuItem
             // 
             this.process1ToolStripMenuItem.Name = "process1ToolStripMenuItem";
-            this.process1ToolStripMenuItem.Size = new System.Drawing.Size(123, 22);
+            this.process1ToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
             this.process1ToolStripMenuItem.Text = "Process 1";
             this.process1ToolStripMenuItem.Click += new System.EventHandler(this.process1ToolStripMenuItem_Click);
             // 
@@ -88,8 +88,8 @@
             // registryEngineToolStripMenuItem
             // 
             this.registryEngineToolStripMenuItem.Name = "registryEngineToolStripMenuItem";
-            this.registryEngineToolStripMenuItem.Size = new System.Drawing.Size(100, 20);
-            this.registryEngineToolStripMenuItem.Text = "Registry Engine";
+            this.registryEngineToolStripMenuItem.Size = new System.Drawing.Size(150, 20);
+            this.registryEngineToolStripMenuItem.Text = "Populate Registry Engine";
             this.registryEngineToolStripMenuItem.Click += new System.EventHandler(this.registryEngineToolStripMenuItem_Click);
             // 
             // fullAutomatedToolStripMenuItem
