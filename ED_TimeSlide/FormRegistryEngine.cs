@@ -192,7 +192,7 @@ namespace ED_TimeSlide
             #endregion
 
             #region Preliminary Filters
-            if (msg.BodyId == 0) return; // Ignore primary suns            
+            if (msg.DistanceFromArrivalLS == 0) return; // Ignore primary body             
             //if (msg.BodyName.Contains(Settings.FilterBeltCluster)) return; // Ignore belt clusters, as they are not valid orbital bodies
             //if (msg.BodyName.Contains(Settings.FilterRingCluster)) return; // Ignore ring clusters, as they are not valid orbital bodies
             // DISTANCE GATE FILTER: Turn off secondary star noise and distant binary if the body sits close to the arrivalpoint 
@@ -292,6 +292,10 @@ namespace ED_TimeSlide
             {
                 if (TryValidateStagingCluster(stagingBlock, out MasterOrbitAnchor verifiedAnchor, out _))
                 {
+                    if(verifiedAnchor.SystemName == "Ki")
+                    {
+
+                    }
                     verifiedAnchor.LastCheckedTimestamp = verifiedAnchor.AnchorTimestamp;
                     inst_OrbitRegistry.CommitMasterAnchor(basePlanetKey, verifiedAnchor);
                 }

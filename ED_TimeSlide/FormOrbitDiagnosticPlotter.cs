@@ -37,7 +37,7 @@ namespace ED_TimeSlide
 
             #region Default Control Interface Values
             lblPlotterStatus.Text = "[IDLE] Awaiting target file selection...";
-            txtFolderPath.Text = @"E:\Elite Dangerous\EDDN data\Processed\Test\Journal.Scan-2025-10-29.EDD";
+            //txtFolderPath.Text = @"E:\Elite Dangerous\EDDN data\Processed\Test\Journal.Scan-2025-10-29.EDD";
             #endregion
         }
         #region User Interface Navigation Click Event Registries
@@ -54,7 +54,7 @@ namespace ED_TimeSlide
             #region Guard Array Boundaries Against Out Of Bounds Sync Faults
             if (targetedSelectionIndex < 0 || targetedSelectionIndex >= parallelRegistryKeys.Count)
             {
-                lblPlotterStatus.Text = "[ERROR] Selection index mapping disconnect occurred.";
+                lblPlotterStatus.Text = "[ERROR] Selection index mapping disconnect occurred";
                 return;
             }
             #endregion
@@ -75,7 +75,7 @@ namespace ED_TimeSlide
 
             if (!inst_OrbitRegistry.TryGetMasterAnchor(targetRegistryKey, out MasterOrbitAnchor anchor))
             {
-                lblPlotterStatus.Text = "[ERROR] Selected key not found inside Master Orbit Registry.";
+                lblPlotterStatus.Text = "[ERROR] Selected key not found inside Master Orbit Registry";
                 return;
             }
             #endregion
@@ -447,9 +447,9 @@ namespace ED_TimeSlide
                 #region Assemble Form Status Strip Output Metrics
                 string calculatedErrorSuffixString = (absoluteMaximumDeviationPercent > Settings.MaxAllowedErrorPercent)
                     ? $">{Settings.MaxAllowedErrorPercent:F3}% Threshold Breach (Peak: {absoluteMaximumDeviationPercent:F2}%)"
-                    : $"{absoluteMaximumDeviationPercent:F2}% (Pass)";
+                    : $"{absoluteMaximumDeviationPercent:F2}% (Pass), ScanDB datapoints: {dbTimestamp.Length}";
 
-                lblPlotterStatus.Text = $"[IDLE] Visual plot synchronized successfully. Max Dev: {absoluteMaximumDeviationLS:F4} Ls | Max Error: {calculatedErrorSuffixString}.";
+                lblPlotterStatus.Text = $"[IDLE] Visual plot synchronized successfully. Max Dev: {absoluteMaximumDeviationLS:F4} Ls | Max Error: {calculatedErrorSuffixString}, ScanDB datapoints: {dbTimestamp.Length}";
                 #endregion
             }
             catch (Exception ex)
@@ -564,15 +564,16 @@ namespace ED_TimeSlide
         }
         private async void FormOrbitDiagnosticPlotter_Load(object sender, EventArgs e)
         {
+            /*
             #region Guard Matrix Checks for Active Default Text Strings
             if (string.IsNullOrWhiteSpace(txtFolderPath.Text)) return;
 
             string verifiedStartupPath = txtFolderPath.Text.Trim();
             if (!File.Exists(verifiedStartupPath)) return;
             #endregion
-
+            */
             #region Populate combo box
-            lblPlotterStatus.Text = "[IDLE] ScanDB loaded. Ready.";
+            lblPlotterStatus.Text = "[IDLE] ScanDB loaded. Ready";
             PopulatePlanetSelectionComboBox();
             #endregion
         }
@@ -599,15 +600,22 @@ namespace ED_TimeSlide
                 foreach (string compositeKey in masterKeysArray)
                 {
                     if (string.IsNullOrWhiteSpace(compositeKey)) continue;
+                    #region Check if the amount of datapoints avalible in the ScanDB is with the filter range
+                    long systemID = -1;
+                    long bodyID = -1;
+                    if (!inst_OrbitRegistry.SplitKeyintoIDs(compositeKey, out systemID, out bodyID)) continue;
+                    int scanDBDataPoints = ScanDataStorageDriver.GetCelestialDataPointCount(systemID, bodyID);
+                    if (scanDBDataPoints < nud_Min_DataFilter.Value || scanDBDataPoints > nud_Max_DataFilter.Value)
+                    {
+                        continue;
+                    }
+                    #endregion
 
                     string systemBodyName = null;
                     if (inst_OrbitRegistry.TryGetSystemBodyName(compositeKey, out systemBodyName))
                     {
                         #region Commit Data Streams Directly to Parallel Memory Tracks
-                        // Pipeline 1: Visual Dropdown List Row
                         cmbPlanetSelector.Items.Add(systemBodyName);
-
-                        // Pipeline 2: Matching Index Persistent Key Array
                         parallelRegistryKeys.Add(compositeKey);
                         #endregion
                     }
@@ -615,7 +623,7 @@ namespace ED_TimeSlide
                     {
                         cmbPlanetSelector.Items.Clear();
                         parallelRegistryKeys.Clear();
-                        lblPlotterStatus.Text = "[ERROR] - Failed to load BodyNames configuration arrays.";
+                        lblPlotterStatus.Text = "[ERROR] - Failed to load BodyNames configuration arrays";
                         break;
                     }
                 }
@@ -629,7 +637,16 @@ namespace ED_TimeSlide
             {
                 cmbPlanetSelector.SelectedIndex = 0;
             }
+            else
+            {
+                lblPlotterStatus.Text = $"[WARNING] No bodies avalible within filter window";
+            }
             #endregion
+        }
+
+        private void nud_Min_DataFilter_ValueChanged(object sender, EventArgs e)
+        {
+            PopulatePlanetSelectionComboBox();
         }
     }
 }

@@ -185,6 +185,11 @@ namespace ED_TimeSlide
                     }
                     #endregion
 
+                    if(record.Message.DistanceFromArrivalLS == 0 && record.Message.BodyId != 0)
+                    {
+
+                    }
+
                     successCallback(record);
                 }
                 #endregion
@@ -193,6 +198,8 @@ namespace ED_TimeSlide
             {
                 // TODO: Handle or route corrupt line string logging profiles to \Data\Errors\
             }
+
+
         }
     }
 }

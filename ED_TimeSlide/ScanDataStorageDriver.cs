@@ -50,6 +50,7 @@ namespace ED_TimeSlide
 
 
             InitializeDatabaseStructure();
+            PreloadCacheFromDatabase();
             StartConsumerPipeline();
         }
 
@@ -190,6 +191,42 @@ namespace ED_TimeSlide
 
             return dataset;
         }
+        /// <summary> Retrieves the total number of telemetry data points recorded for a specific body. Bypasses heavy data rows and string joins, reading straight from the database index. </summary>
+        public static int GetCelestialDataPointCount(long systemEdId, long bodyEdId)
+        {
+            string connString = $"Data Source={Settings.ScanDataDbPath};Mode=ReadOnly;";
+            int recordCount = 0;
+
+            using (var connection = new SqliteConnection(connString))
+            {
+                connection.Open();
+
+                using (var cmd = connection.CreateCommand())
+                {
+                    // Two-step optimization combined into an efficient nested subquery look-up
+                    cmd.CommandText = @"
+                SELECT COUNT(*) 
+                FROM DataPoints 
+                WHERE BodyDBID = (
+                    SELECT b.BodyDBID 
+                    FROM Bodies b
+                    JOIN StarSystems s ON b.SystemDBID = s.SystemDBID
+                    WHERE s.SystemEDID = @sysEdId AND b.BodyEDID = @bodyEdId
+                    LIMIT 1
+                );";
+
+                    cmd.Parameters.AddWithValue("@sysEdId", systemEdId);
+                    cmd.Parameters.AddWithValue("@bodyEdId", bodyEdId);
+
+                    var result = cmd.ExecuteScalar();
+                    if (result != null && result != DBNull.Value)
+                    {
+                        recordCount = Convert.ToInt32(result);
+                    }
+                }
+            }
+            return recordCount;
+        }
         #endregion
         #region Private Functions
         private void InitializeDatabaseStructure()
@@ -273,6 +310,52 @@ namespace ED_TimeSlide
                 () => ProcessQueueItemsInBatches(),
                 _cancellationToken
             );
+        }
+        private void PreloadCacheFromDatabase()
+        {
+            string connectionString = $"Data Source={Settings.ScanDataDbPath};";
+
+            using (var connection = new SqliteConnection(connectionString))
+            {
+                connection.Open();
+
+                // 1. Warm up Star Systems Lookup Cache
+                using (var cmd = connection.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT SystemEDID, SystemDBID FROM StarSystems;";
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            if (!reader.IsDBNull(0) && !reader.IsDBNull(1))
+                            {
+                                _systemCache.TryAdd(reader.GetInt64(0), reader.GetInt64(1));
+                            }
+                        }
+                    }
+                }
+
+                // 2. Warm up Celestial Bodies Lookup Cache
+                using (var cmd = connection.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT SystemDBID, BodyEDID, BodyDBID FROM Bodies;";
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            if (!reader.IsDBNull(0) && !reader.IsDBNull(1) && !reader.IsDBNull(2))
+                            {
+                                long sysId = reader.GetInt64(0);
+                                long bodyEdid = reader.GetInt64(1);
+                                long bodyDbid = reader.GetInt64(2);
+
+                                string cacheKey = $"{sysId}_{bodyEdid}";
+                                _bodyCache.TryAdd(cacheKey, bodyDbid);
+                            }
+                        }
+                    }
+                }
+            }
         }
         private void ProcessQueueItemsInBatches()
         {
