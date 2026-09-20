@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SQLitePCL;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -32,7 +33,8 @@ namespace ED_TimeSlide
             inst_OrbitRegistry = orbitRegistry;
 
             //testing setup of ease
-            txtFolderPath.Text = @"E:\Elite Dangerous\EDDN data\Raw Data\Scan\Test";
+            //txtFolderPath.Text = @"E:\Elite Dangerous\EDDN data\Raw Data\Scan\Test";
+            txtFolderPath.Text = @"D:\Elite Dangerous\EDDN data\Raw Data\Scan\Test";
             btnStartAnalysis.Enabled = true;
         }
 
@@ -215,12 +217,12 @@ namespace ED_TimeSlide
             #region If no staging entry for this body add it to stageing
             if (!inst_OrbitRegistry.TryGetStagingBlock(stagingLookupKey, out StagingOrbitBlock stagingBlock))
             {
-                //TODO retrograde
-                stagingBlock = new StagingOrbitBlock
+                 stagingBlock = new StagingOrbitBlock
                 {
                     SemiMajorAxis = msg.SemiMajorAxis,
                     Eccentricity = msg.Eccentricity,
-                    OrbitalPeriod = msg.OrbitalPeriod
+                    OrbitalPeriod = msg.OrbitalPeriod,
+                    IsRetrograde = msg.RotationPeriod < 0 
                 };
                 inst_OrbitRegistry.CommitStagingBlock(stagingLookupKey, stagingBlock);
             }
@@ -265,7 +267,7 @@ namespace ED_TimeSlide
             {
                 if (TryValidateStagingCluster(stagingBlock, out MasterOrbitAnchor verifiedAnchor, out _))
                 {
-                    verifiedAnchor.LastCheckedTimestamp = verifiedAnchor.AnchorTimestampUnixSec;
+                    verifiedAnchor.LastCheckedTimestampUnixSec = verifiedAnchor.AnchorTimestampUnixSec;
                     inst_OrbitRegistry.CommitMasterAnchor(basePlanetKey, verifiedAnchor);
                 }
                 else
@@ -278,97 +280,132 @@ namespace ED_TimeSlide
         }
         private bool TryValidateStagingCluster(StagingOrbitBlock stagingBlock, out MasterOrbitAnchor verifiedAnchor, out List<StagedPoint> structuralOutliers)
         {
+            if (stagingBlock.CollectedPoints != null && stagingBlock.CollectedPoints.Count > 1)
+            {
+                stagingBlock.CollectedPoints = stagingBlock.CollectedPoints
+                    .OrderBy(pt => pt.TimestampUnixSec)
+                    .ToList();
+            }
+
             #region Function Variables
             verifiedAnchor = null;
             structuralOutliers = new List<StagedPoint>();
-
-            var firstPt = stagingBlock.CollectedPoints[0];
-            var lastPt = stagingBlock.CollectedPoints[stagingBlock.CollectedPoints.Count - 1];
-
-            bool dynamicIsClimbing = lastPt.Distance >= firstPt.Distance;
             bool isStellarBody = stagingBlock.OrbitalPeriod <= 0;
             #endregion
 
-            #region Iterate Through Each Point as Candidate Anchor
+            #region RANSAC Consensus Pass Iteration Loop Matrix
             for (int anchorIndex = 0; anchorIndex < stagingBlock.CollectedPoints.Count; anchorIndex++)
             {
-                #region Initialize Candidate Anchor and Outliers
                 var candidateAnchor = stagingBlock.CollectedPoints[anchorIndex];
-                int agreementCount = 0;
-                var localOutliers = new List<StagedPoint>();
-                #endregion
 
-                #region Check Each Point 
-                for (int checkIndex = 0; checkIndex < stagingBlock.CollectedPoints.Count; checkIndex++)
+                #region Version 1.32: Pre-Calculate Both Absolute Directional Phase Paths
+                double m0Climbing = 0.0;
+                double m0Falling = 0.0;
+
+                if (!isStellarBody)
                 {
-                    #region Skip Self-Comparison
-                    if (anchorIndex == checkIndex)
-                    {
-                        agreementCount++;
-                        continue;
-                    }
-                    #endregion
+                    double distM = candidateAnchor.Distance * Settings.SpeedOfLightMetersPerSecond;
+                    double cosE = (1.0 - (distM / stagingBlock.SemiMajorAxis)) / stagingBlock.Eccentricity;
+                    cosE = Math.Max(-1.0, Math.Min(1.0, cosE));
 
-                    #region Calculate Variance
-                    var pointToCheck = stagingBlock.CollectedPoints[checkIndex];
-                    bool pointMatchesBaseline = false;
-                    #endregion
+                    double eClimbing = Math.Acos(cosE);
+                    double eFalling = (2.0 * Math.PI) - eClimbing;
 
-                    #region If Stellar Body, Check Variance Directly
-                    if (isStellarBody)
-                    {
-                        double stellarVariance = Math.Abs(pointToCheck.Distance - candidateAnchor.Distance);
-                        if (stellarVariance <= Settings.MaxStellarVarianceLs) pointMatchesBaseline = true;
-                    }
-                    #endregion
+                    double mClimbing = eClimbing - (stagingBlock.Eccentricity * Math.Sin(eClimbing));
+                    double mFalling = eFalling - (stagingBlock.Eccentricity * Math.Sin(eFalling));
 
-                    #region If Planetary Body, Use Kepler Solver to Predict Distance
-                    else
-                    {
-                        KeplerOrbitSolver.OrbitalElements orbitalElements = new KeplerOrbitSolver.OrbitalElements
-                        {
-                            SemiMajorAxisMetres = stagingBlock.SemiMajorAxis,
-                            Eccentricity = stagingBlock.Eccentricity,
-                            OrbitalPeriodSeconds = stagingBlock.OrbitalPeriod,
-                            AnchorTimestampUnixSec = candidateAnchor.TimestampUnixSec,
-                            AnchorDistanceLs = candidateAnchor.Distance,
-                            IsClimbingOutward = dynamicIsClimbing
-                        };
-                        double predictedDistance = KeplerOrbitSolver.PredictDistanceAtTimestamp(orbitalElements, pointToCheck.TimestampUnixSec);
+                    double meanMotion = (2.0 * Math.PI) / stagingBlock.OrbitalPeriod;
+                    double elapsedSec = candidateAnchor.TimestampUnixSec - Settings.RealLifeSimulationLaunchEpochSeconds;
 
-                        double variance = Math.Abs(pointToCheck.Distance - predictedDistance);
-                        double errorPercentage = predictedDistance > 0 ? (variance / predictedDistance) * 100.0 : 0;
+                    m0Climbing = mClimbing - (meanMotion * elapsedSec);
+                    m0Climbing = m0Climbing % (2.0 * Math.PI);
+                    if (m0Climbing < 0) m0Climbing += (2.0 * Math.PI);
 
-                        if (errorPercentage <= Settings.MaxAllowedErrorPercent) pointMatchesBaseline = true;
-                    }
-                    #endregion
+                    m0Falling = mFalling - (meanMotion * elapsedSec);
+                    m0Falling = m0Falling % (2.0 * Math.PI);
+                    if (m0Falling < 0) m0Falling += (2.0 * Math.PI);
+                }
+                else
+                {
 
-                    #region If Point Matches Baseline, Increment Agreement Count; Otherwise, Add to Local Outliers
-                    if (pointMatchesBaseline) 
-                        agreementCount++;
-                    else
-                        localOutliers.Add(pointToCheck);
-                    #endregion
                 }
                 #endregion
 
-                #region If Enough Points Agree, Promote to Master Registry
-                if (agreementCount >= 4)
+                #region Evaluate Both Orientations Separately to Isolate True Vector
+                bool[] directionOptions = isStellarBody ? new bool[] { true } : new bool[] { true, false };
+
+                foreach (bool evaluateAsClimbing in directionOptions)
                 {
-                    verifiedAnchor = new MasterOrbitAnchor
+                    int agreementCount = 0;
+                    var localOutliers = new List<StagedPoint>();
+                    double targetedM0 = evaluateAsClimbing ? m0Climbing : m0Falling;
+
+                    for (int checkIndex = 0; checkIndex < stagingBlock.CollectedPoints.Count; checkIndex++)
                     {
-                        SemiMajorAxis = stagingBlock.SemiMajorAxis,
-                        Eccentricity = stagingBlock.Eccentricity,
-                        OrbitalPeriod = stagingBlock.OrbitalPeriod,
-                        AnchorTimestampUnixSec = candidateAnchor.TimestampUnixSec,
-                        AnchorDistance = candidateAnchor.Distance,
-                        SystemName = candidateAnchor.SystemName,
-                        VerifiedSourceFile = candidateAnchor.SourceFile,
-                        BodyName = candidateAnchor.BodyName,
-                        IsClimbingOutward = !isStellarBody && dynamicIsClimbing
-                    };
-                    structuralOutliers = localOutliers;
-                    return true;
+                        if (anchorIndex == checkIndex)
+                        {
+                            agreementCount++;
+                            continue;
+                        }
+
+                        var pointToCheck = stagingBlock.CollectedPoints[checkIndex];
+                        bool pointMatchesBaseline = false;
+
+                        if (isStellarBody)
+                        {
+                            double stellarVariance = Math.Abs(pointToCheck.Distance - candidateAnchor.Distance);
+                            if (stellarVariance <= Settings.MaxStellarVarianceLs) pointMatchesBaseline = true;
+                        }
+                        else
+                        {
+                            #region Version 1.32: Direct Absolute Prediction Extraction Loop
+                            KeplerOrbitSolver.OrbitalElements testElements = new KeplerOrbitSolver.OrbitalElements
+                            {
+                                SemiMajorAxisMetres = stagingBlock.SemiMajorAxis,
+                                Eccentricity = stagingBlock.Eccentricity,
+                                OrbitalPeriodSeconds = stagingBlock.OrbitalPeriod,
+                                AnchorTimestampUnixSec = Settings.RealLifeSimulationLaunchEpochSeconds,
+                                AnchorDistanceLs = candidateAnchor.Distance,
+                                IsClimbingOutward = evaluateAsClimbing,
+                                MeanAnomalyAtUniversalEpoch = targetedM0,
+                                IsRetrograde = stagingBlock.IsRetrograde
+                            };
+
+                            double predictedDistance = KeplerOrbitSolver.PredictDistanceAtTimestamp(testElements, pointToCheck.TimestampUnixSec);
+                            double variance = Math.Abs(pointToCheck.Distance - predictedDistance);
+                            double errorPercentage = predictedDistance > 0 ? (variance / predictedDistance) * 100.0 : 0;
+
+                            if (errorPercentage <= Settings.MaxAllowedErrorPercent) pointMatchesBaseline = true;
+                            #endregion
+                        }
+
+                        if (pointMatchesBaseline)
+                            agreementCount++;
+                        else
+                            localOutliers.Add(pointToCheck);
+                    }
+
+                    #region Consensus Graduation Trigger Matrix
+                    if (agreementCount >= 4)
+                    {
+                        verifiedAnchor = new MasterOrbitAnchor
+                        {
+                            SemiMajorAxis = stagingBlock.SemiMajorAxis,
+                            Eccentricity = stagingBlock.Eccentricity,
+                            OrbitalPeriod = stagingBlock.OrbitalPeriod,
+                            AnchorTimestampUnixSec = candidateAnchor.TimestampUnixSec,
+                            AnchorDistance = candidateAnchor.Distance,
+                            SystemName = candidateAnchor.SystemName,
+                            VerifiedSourceFile = candidateAnchor.SourceFile,
+                            BodyName = candidateAnchor.BodyName,
+                            IsClimbingOutward = !isStellarBody && evaluateAsClimbing,
+                            MeanAnomalyAtUniversalEpoch = targetedM0
+                        };
+
+                        structuralOutliers = localOutliers;
+                        return true;
+                    }
+                    #endregion
                 }
                 #endregion
             }

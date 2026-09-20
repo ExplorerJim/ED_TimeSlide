@@ -213,9 +213,11 @@ namespace ED_TimeSlide
                     SemiMajorAxisMetres = anchor.SemiMajorAxis,
                     Eccentricity = anchor.Eccentricity,
                     OrbitalPeriodSeconds = anchor.OrbitalPeriod,
-                    AnchorTimestampUnixSec = KeplerOrbitSolver.ToUnixSeconds(anchor.AnchorTimestampUnixSec),
+                    AnchorTimestampUnixSec = anchor.AnchorTimestampUnixSec,
                     AnchorDistanceLs = anchor.AnchorDistance,
-                    IsClimbingOutward = anchor.IsClimbingOutward
+                    IsClimbingOutward = anchor.IsClimbingOutward,
+                    MeanAnomalyAtUniversalEpoch = anchor.MeanAnomalyAtUniversalEpoch,
+                    IsRetrograde = anchor.IsRetrograde
                 };
             #endregion
 

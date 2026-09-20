@@ -507,7 +507,8 @@ namespace ED_TimeSlide
                 OrbitalPeriodSeconds = anchor.OrbitalPeriod,
                 AnchorTimestampUnixSec = anchor.AnchorTimestampUnixSec,
                 AnchorDistanceLs = anchor.AnchorDistance,
-                IsClimbingOutward = anchor.IsClimbingOutward
+                IsClimbingOutward = anchor.IsClimbingOutward,
+                IsRetrograde = msg.RotationPeriod < 0
             };
 
             long currentTimestampSeconds = msg.Timestamp.ToUnixSeconds();

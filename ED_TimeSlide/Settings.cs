@@ -1,7 +1,9 @@
-﻿using System;
+﻿using ED_TimeSlide;
+using System;
 using System.IO;
 using System.Net.NetworkInformation;
 using System.Windows.Forms;
+using static ED_TimeSlide.KeplerOrbitSolver;
 
 namespace ED_TimeSlide
 {
@@ -15,8 +17,9 @@ namespace ED_TimeSlide
         public static readonly string FilterBeltCluster = "Belt Cluster";
         public static readonly string FilterRingCluster = "Ring Cluster";
         #endregion
-        #region Speed of Light constant used to convert Light Seconds into Metres
+        #region Constants used
         public static readonly double SpeedOfLightMetersPerSecond = 299792458.0;
+        public static readonly long RealLifeSimulationLaunchEpochSeconds = 1388534400;
         #endregion
         #region Filenames
         private static readonly string BaseDataDir = @"D:\Elite Dangerous\Data"; //Office D, Lounge E
@@ -45,3 +48,4 @@ namespace ED_TimeSlide
         #endregion
     }
 }
+

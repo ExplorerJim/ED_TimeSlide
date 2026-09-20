@@ -14,6 +14,8 @@ namespace ED_TimeSlide
             public long AnchorTimestampUnixSec;
             public double AnchorDistanceLs;
             public bool IsClimbingOutward;
+            public double MeanAnomalyAtUniversalEpoch;
+            public bool IsRetrograde;
         }
         #endregion        
 
@@ -42,9 +44,15 @@ namespace ED_TimeSlide
             double meanAnomalyAnchor = eccentricAnomalyAnchor - input.Eccentricity * Math.Sin(eccentricAnomalyAnchor);
 
             // 3. Calculate elapsed time delta and find the new Mean Anomaly for our target time step
-            double deltaTimeSeconds = targetTimestampUnixSec - input.AnchorTimestampUnixSec;
+            double deltaTimeSeconds = targetTimestampUnixSec - Settings.RealLifeSimulationLaunchEpochSeconds;
             double meanMotion = (2.0 * Math.PI) / input.OrbitalPeriodSeconds;
-            double targetMeanAnomaly = meanAnomalyAnchor + (meanMotion * deltaTimeSeconds);
+
+            if (input.IsRetrograde)
+            {
+                meanMotion = -meanMotion;
+            }
+
+            double targetMeanAnomaly = input.MeanAnomalyAtUniversalEpoch + (meanMotion * deltaTimeSeconds);
 
             // Normalize angle boundaries within 0 to 2*PI radians
             targetMeanAnomaly = targetMeanAnomaly % (2.0 * Math.PI);

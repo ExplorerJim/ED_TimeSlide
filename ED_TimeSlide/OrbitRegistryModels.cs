@@ -13,16 +13,15 @@ namespace ED_TimeSlide
         public double SemiMajorAxis { get; set; }
         public double Eccentricity { get; set; }
         public double OrbitalPeriod { get; set; }
-
-        // Our 1 definitive trusted anchor point
         public long AnchorTimestampUnixSec { get; set; } // Unix epoch seconds for easier math
         public double AnchorDistance { get; set; }
         public string VerifiedSourceFile { get; set; }
         public string BodyName { get; set; }
         public string SystemName { get; set; }
         public bool IsClimbingOutward { get; set; }
-
-        public long LastCheckedTimestamp { get; set; }
+        public long LastCheckedTimestampUnixSec { get; set; }
+        public double MeanAnomalyAtUniversalEpoch { get; set; }
+        public bool IsRetrograde { get; set; }
     }
 
     /// <summary>
