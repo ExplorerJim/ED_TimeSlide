@@ -124,7 +124,7 @@ namespace ED_TimeSlide
         {
             return (long)((dateTimeExcelOA-25569) * 86400.0);
         }
-        public static long ToUnixSeconds(this double dateTimeUnixSec)
+        public static long ToExcelOA(this double dateTimeUnixSec)
         {
             return (long)(dateTimeUnixSec / 86400.0) + 25569;
         }
