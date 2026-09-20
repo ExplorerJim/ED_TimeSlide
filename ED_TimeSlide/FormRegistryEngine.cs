@@ -34,7 +34,7 @@ namespace ED_TimeSlide
 
             //testing setup of ease
             //txtFolderPath.Text = @"E:\Elite Dangerous\EDDN data\Raw Data\Scan\Test";
-            txtFolderPath.Text = @"D:\Elite Dangerous\EDDN data\Raw Data\Scan\Test";
+            txtFolderPath.Text = @"E:\Elite Dangerous\EDDN data\Raw Data\Scan\Test";
             btnStartAnalysis.Enabled = true;
         }
 
@@ -265,6 +265,11 @@ namespace ED_TimeSlide
             #region Check for Staging Block Completion and add to Master Registry if Validated
             if (stagingBlock.CollectedPoints.Count == 5)
             {
+                if (stagingBlock.CollectedPoints[0].SystemName == "Ki")
+                {
+
+                }
+
                 if (TryValidateStagingCluster(stagingBlock, out MasterOrbitAnchor verifiedAnchor, out _))
                 {
                     verifiedAnchor.LastCheckedTimestampUnixSec = verifiedAnchor.AnchorTimestampUnixSec;
@@ -315,7 +320,7 @@ namespace ED_TimeSlide
                     double mFalling = eFalling - (stagingBlock.Eccentricity * Math.Sin(eFalling));
 
                     double meanMotion = (2.0 * Math.PI) / stagingBlock.OrbitalPeriod;
-                    double elapsedSec = candidateAnchor.TimestampUnixSec - Settings.RealLifeSimulationLaunchEpochSeconds;
+                    double elapsedSec = candidateAnchor.TimestampUnixSec;// - Settings.RealLifeSimulationLaunchEpochSeconds;
 
                     m0Climbing = mClimbing - (meanMotion * elapsedSec);
                     m0Climbing = m0Climbing % (2.0 * Math.PI);
@@ -364,10 +369,9 @@ namespace ED_TimeSlide
                                 SemiMajorAxisMetres = stagingBlock.SemiMajorAxis,
                                 Eccentricity = stagingBlock.Eccentricity,
                                 OrbitalPeriodSeconds = stagingBlock.OrbitalPeriod,
-                                AnchorTimestampUnixSec = Settings.RealLifeSimulationLaunchEpochSeconds,
+                                AnchorTimestampUnixSec = candidateAnchor.TimestampUnixSec,//Settings.RealLifeSimulationLaunchEpochSeconds,
                                 AnchorDistanceLs = candidateAnchor.Distance,
                                 IsClimbingOutward = evaluateAsClimbing,
-                                MeanAnomalyAtUniversalEpoch = targetedM0,
                                 IsRetrograde = stagingBlock.IsRetrograde
                             };
 

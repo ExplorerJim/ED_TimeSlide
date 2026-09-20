@@ -216,7 +216,6 @@ namespace ED_TimeSlide
                     AnchorTimestampUnixSec = anchor.AnchorTimestampUnixSec,
                     AnchorDistanceLs = anchor.AnchorDistance,
                     IsClimbingOutward = anchor.IsClimbingOutward,
-                    MeanAnomalyAtUniversalEpoch = anchor.MeanAnomalyAtUniversalEpoch,
                     IsRetrograde = anchor.IsRetrograde
                 };
             #endregion
