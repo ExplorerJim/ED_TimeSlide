@@ -505,7 +505,7 @@ namespace ED_TimeSlide
                 SemiMajorAxisMetres = anchor.SemiMajorAxis,
                 Eccentricity = anchor.Eccentricity,
                 OrbitalPeriodSeconds = anchor.OrbitalPeriod,
-                AnchorTimestamp = anchor.AnchorTimestamp,
+                AnchorTimestampUnixSec = anchor.AnchorTimestampUnixSec,
                 AnchorDistanceLs = anchor.AnchorDistance,
                 IsClimbingOutward = anchor.IsClimbingOutward
             };
@@ -536,7 +536,7 @@ namespace ED_TimeSlide
                 }
                 #endregion
 
-                LogAnomalyToFile(basePlanetKey, record, expectedDistance, anchor.AnchorTimestamp, ghostTimestamp);
+                LogAnomalyToFile(basePlanetKey, record, expectedDistance, anchor.AnchorTimestampUnixSec, ghostTimestamp);
             }
             #endregion
         }

@@ -28,6 +28,7 @@ namespace ED_TimeSlide
         [JsonProperty("event")]
         public string EventName { get; set; }
 
+        // Real world time the uploaders PC collected the data
         [JsonProperty("timestamp")]
         public DateTime Timestamp { get; set; }
 
@@ -71,6 +72,10 @@ namespace ED_TimeSlide
         // BARYCENTER FIX: Extracts the gravitational node orbital radius fallback parameter 
         [JsonProperty("Axis")]
         public double Axis { get; set; }
+
+        // Negative rotation signifys a retrograde body.
+        [JsonProperty("RotationPeriod")]
+        public double RotationPeriod { get; set; }
     }
     #endregion
 }

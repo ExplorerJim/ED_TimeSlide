@@ -11,7 +11,7 @@ namespace ED_TimeSlide
             public double SemiMajorAxisMetres;
             public double Eccentricity;
             public double OrbitalPeriodSeconds;
-            public long AnchorTimestamp;
+            public long AnchorTimestampUnixSec;
             public double AnchorDistanceLs;
             public bool IsClimbingOutward;
         }
@@ -22,7 +22,7 @@ namespace ED_TimeSlide
         /// Predicts the exact physical distance (in Light Seconds) a body should be from its 
         /// parent star at a specific target timestamp, grounded by a known valid reference anchor.
         /// </summary>
-        public static double PredictDistanceAtTimestamp(OrbitalElements input, long targetTimestamp)
+        public static double PredictDistanceAtTimestamp(OrbitalElements input, long targetTimestampUnixSec)
         {
             // 1. Convert anchor distance to metres for unified math scaling
             double anchorDistanceMetres = input.AnchorDistanceLs * Settings.SpeedOfLightMetersPerSecond;
@@ -42,7 +42,7 @@ namespace ED_TimeSlide
             double meanAnomalyAnchor = eccentricAnomalyAnchor - input.Eccentricity * Math.Sin(eccentricAnomalyAnchor);
 
             // 3. Calculate elapsed time delta and find the new Mean Anomaly for our target time step
-            double deltaTimeSeconds = targetTimestamp - input.AnchorTimestamp;
+            double deltaTimeSeconds = targetTimestampUnixSec - input.AnchorTimestampUnixSec;
             double meanMotion = (2.0 * Math.PI) / input.OrbitalPeriodSeconds;
             double targetMeanAnomaly = meanAnomalyAnchor + (meanMotion * deltaTimeSeconds);
 
@@ -103,7 +103,7 @@ namespace ED_TimeSlide
             double timeOffsetSeconds = deltaM / meanMotion;
 
             // Return the calculated Ghost Timestamp relative to your anchor time line
-            return input.AnchorTimestamp + (long)timeOffsetSeconds;
+            return input.AnchorTimestampUnixSec + (long)timeOffsetSeconds;
         }
 
         /// <summary>
@@ -112,6 +112,14 @@ namespace ED_TimeSlide
         public static long ToUnixSeconds(this DateTime dateTime)
         {
             return (long)(dateTime.ToUniversalTime() - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+        }
+        public static long ToUnixSeconds(this double dateTimeExcelOA)
+        {
+            return (long)(dateTimeExcelOA * 86400.0);
+        }
+        public static long ToExcelOA(this double dateTimeUnixSec)
+        {
+            return (long)(dateTimeUnixSec / 86400.0);
         }
         #endregion
     }

@@ -193,15 +193,11 @@ namespace ED_TimeSlide
 
             #region Preliminary Filters
             if (msg.DistanceFromArrivalLS == 0) return; // Ignore primary body             
-            //if (msg.BodyName.Contains(Settings.FilterBeltCluster)) return; // Ignore belt clusters, as they are not valid orbital bodies
-            //if (msg.BodyName.Contains(Settings.FilterRingCluster)) return; // Ignore ring clusters, as they are not valid orbital bodies
-            // DISTANCE GATE FILTER: Turn off secondary star noise and distant binary if the body sits close to the arrivalpoint 
-            //if (msg.StarType != null && msg.DistanceFromArrivalLS <= Settings.MinStellarDistanceForStars) return;
             #endregion
 
             #region Collect Key Variables
             string basePlanetKey = $"{msg.SystemAddress}_{msg.BodyId}";
-            long currentTimestampSeconds = msg.Timestamp.ToUnixSeconds();
+            long currentTimestampUnixSeconds = msg.Timestamp.ToUnixSeconds();
             double currentDistance = msg.DistanceFromArrivalLS;
             string bodyName = msg.BodyName;
             string systemName = msg.StarSystem;
@@ -214,35 +210,12 @@ namespace ED_TimeSlide
             #region Generate Staging Registry Key
             string uploaderId = record.Header?.UploaderId ?? "Anonymous";
             string stagingLookupKey = $"{basePlanetKey}_{uploaderId}";
-            #endregion
-            
-            /*
-            #region Directly Promote Stellar Bodies to Master Registry
-            if (!string.IsNullOrEmpty(msg.StarType) || msg.OrbitalPeriod <= 0)
-            {
-                var starAnchor = new MasterOrbitAnchor
-                {
-                    SemiMajorAxis = msg.SemiMajorAxis,
-                    Eccentricity = msg.Eccentricity,
-                    OrbitalPeriod = msg.OrbitalPeriod,
-                    AnchorTimestamp = currentTimestampSeconds,
-                    AnchorDistance = currentDistance,
-                    VerifiedSourceFile = currentArchiveName,
-                    BodyName = record.Message.BodyName,
-                    SystemName = record.Message.StarSystem,
-                    IsClimbingOutward = false,
-                    LastCheckedTimestamp = currentTimestampSeconds
-                };
-                inst_OrbitRegistry.CommitMasterAnchor(basePlanetKey ,starAnchor);
-                return;
-            }
-            #endregion
-            */
-            
+            #endregion       
 
             #region If no staging entry for this body add it to stageing
             if (!inst_OrbitRegistry.TryGetStagingBlock(stagingLookupKey, out StagingOrbitBlock stagingBlock))
             {
+                //TODO retrograde
                 stagingBlock = new StagingOrbitBlock
                 {
                     SemiMajorAxis = msg.SemiMajorAxis,
@@ -260,7 +233,7 @@ namespace ED_TimeSlide
                 bool isNetworkDuplicateRow = false;
                 for (int ptIdx = 0; ptIdx < stagingBlock.CollectedPoints.Count; ptIdx++)
                 {
-                    if (stagingBlock.CollectedPoints[ptIdx].Timestamp == currentTimestampSeconds && string.Equals(stagingBlock.CollectedPoints[ptIdx].UploaderId, uploaderId, StringComparison.Ordinal))
+                    if (stagingBlock.CollectedPoints[ptIdx].TimestampUnixSec == currentTimestampUnixSeconds && string.Equals(stagingBlock.CollectedPoints[ptIdx].UploaderId, uploaderId, StringComparison.Ordinal))
                     {
                         isNetworkDuplicateRow = true;
                         break;
@@ -278,7 +251,7 @@ namespace ED_TimeSlide
             #region Add Current Point to Staging Block
             stagingBlock.CollectedPoints.Add(new StagedPoint
             {
-                Timestamp = currentTimestampSeconds,
+                TimestampUnixSec = currentTimestampUnixSeconds,
                 Distance = currentDistance,
                 SourceFile = currentArchiveName,
                 BodyName = bodyName,
@@ -292,11 +265,7 @@ namespace ED_TimeSlide
             {
                 if (TryValidateStagingCluster(stagingBlock, out MasterOrbitAnchor verifiedAnchor, out _))
                 {
-                    if(verifiedAnchor.SystemName == "Ki")
-                    {
-
-                    }
-                    verifiedAnchor.LastCheckedTimestamp = verifiedAnchor.AnchorTimestamp;
+                    verifiedAnchor.LastCheckedTimestamp = verifiedAnchor.AnchorTimestampUnixSec;
                     inst_OrbitRegistry.CommitMasterAnchor(basePlanetKey, verifiedAnchor);
                 }
                 else
@@ -361,11 +330,11 @@ namespace ED_TimeSlide
                             SemiMajorAxisMetres = stagingBlock.SemiMajorAxis,
                             Eccentricity = stagingBlock.Eccentricity,
                             OrbitalPeriodSeconds = stagingBlock.OrbitalPeriod,
-                            AnchorTimestamp = candidateAnchor.Timestamp,
+                            AnchorTimestampUnixSec = candidateAnchor.TimestampUnixSec,
                             AnchorDistanceLs = candidateAnchor.Distance,
                             IsClimbingOutward = dynamicIsClimbing
                         };
-                        double predictedDistance = KeplerOrbitSolver.PredictDistanceAtTimestamp(orbitalElements, pointToCheck.Timestamp);
+                        double predictedDistance = KeplerOrbitSolver.PredictDistanceAtTimestamp(orbitalElements, pointToCheck.TimestampUnixSec);
 
                         double variance = Math.Abs(pointToCheck.Distance - predictedDistance);
                         double errorPercentage = predictedDistance > 0 ? (variance / predictedDistance) * 100.0 : 0;
@@ -391,7 +360,7 @@ namespace ED_TimeSlide
                         SemiMajorAxis = stagingBlock.SemiMajorAxis,
                         Eccentricity = stagingBlock.Eccentricity,
                         OrbitalPeriod = stagingBlock.OrbitalPeriod,
-                        AnchorTimestamp = candidateAnchor.Timestamp,
+                        AnchorTimestampUnixSec = candidateAnchor.TimestampUnixSec,
                         AnchorDistance = candidateAnchor.Distance,
                         SystemName = candidateAnchor.SystemName,
                         VerifiedSourceFile = candidateAnchor.SourceFile,

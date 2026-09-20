@@ -21,7 +21,7 @@ namespace ED_TimeSlide
         public struct CelestialDataset
         {
             public CelestialMetadata Metadata;
-            public double[] ExcelOATimestamps;
+            public double[] TimestampsExcelOA;
             public double[] DistancesToArrival;
         }
         #endregion
@@ -186,7 +186,7 @@ namespace ED_TimeSlide
             }
 
             // 4. Hydrate high-performance primitives directly to avoid object overheads
-            dataset.ExcelOATimestamps = tempTimestamps.ToArray();
+            dataset.TimestampsExcelOA = tempTimestamps.ToArray();
             dataset.DistancesToArrival = tempDistances.ToArray();
 
             return dataset;

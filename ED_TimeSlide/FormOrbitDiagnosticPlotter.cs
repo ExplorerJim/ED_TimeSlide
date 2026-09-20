@@ -1,5 +1,6 @@
 ﻿using OpenTK.Graphics.OpenGL;
 using ScottPlot;
+using ScottPlot.Statistics;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -91,9 +92,9 @@ namespace ED_TimeSlide
             { 
                 CelestialDataset dataset = ScanDataStorageDriver.GetCelestialDataset(systemAddress, bodyID);
                 if ((dataset.Metadata.SystemName != Settings.UnknownData) && (dataset.Metadata.BodyName != Settings.UnknownData)
-                    && (dataset.DistancesToArrival.Length > 0) && (dataset.ExcelOATimestamps.Length > 0))
+                    && (dataset.DistancesToArrival.Length > 0) && (dataset.TimestampsExcelOA.Length > 0))
                 {
-                    RenderOrbitDiagnosticCanvas(anchor, dataset.ExcelOATimestamps, dataset.DistancesToArrival, targetRegistryKey);
+                    RenderOrbitDiagnosticCanvas(anchor, dataset.TimestampsExcelOA, dataset.DistancesToArrival, targetRegistryKey);
                 }
                 else
                 {
@@ -147,64 +148,64 @@ namespace ED_TimeSlide
         }
         #endregion
         #endregion
-        private void RenderOrbitDiagnosticCanvas(MasterOrbitAnchor anchor, double[] dbTimestamp, double[] dbDistanceToArrival, string activeRegistryKey, ScottPlot.AxisLimits? preservedZoomLimits = null)
+        private void RenderOrbitDiagnosticCanvas(MasterOrbitAnchor anchor, double[] dbTimestampExcelOA, double[] dbDistanceToArrival, string activeRegistryKey, ScottPlot.AxisLimits? preservedZoomLimits = null)
         {
             #region Guard Matrix Checks for Missing Components or Models
-            if (anchor == null || dbTimestamp == null || dbTimestamp.Length == 0 || dbDistanceToArrival == null || dbDistanceToArrival.Length == 0 
-                || dbDistanceToArrival.Length != dbTimestamp.Length) return;
+            if (anchor == null || dbTimestampExcelOA == null || dbTimestampExcelOA.Length == 0 || dbDistanceToArrival == null || dbDistanceToArrival.Length == 0 
+                || dbDistanceToArrival.Length != dbTimestampExcelOA.Length) return;
             #endregion
 
             #region Setup In-Memory Observation Datasets Arrays
-            int totalPointsCount = dbTimestamp.Length;
-            double minimumTimestampX = double.MaxValue;
-            double maximumTimestampX = double.MinValue;
+            int totalPointsCount = dbTimestampExcelOA.Length;
+            double minimumTimestampXExcelOA = double.MaxValue;
+            double maximumTimestampXExcelOA = double.MinValue;
             #endregion
 
             #region Pass 1: Parse Flat Telemetry Matrix Primitives from Disk
             for (int i = 0; i < totalPointsCount; i++)
             {
-                if (dbTimestamp[i] < minimumTimestampX) minimumTimestampX = dbTimestamp[i];
-                if (dbTimestamp[i] > maximumTimestampX) maximumTimestampX = dbTimestamp[i];
+                if (dbTimestampExcelOA[i] < minimumTimestampXExcelOA) minimumTimestampXExcelOA = dbTimestampExcelOA[i];
+                if (dbTimestampExcelOA[i] > maximumTimestampXExcelOA) maximumTimestampXExcelOA = dbTimestampExcelOA[i];
             }
             #endregion
 
             #region Pass 2: Calculate Continuous Kepler Trajectory Step Vectors
-            double plotStartX = minimumTimestampX - Settings.PaddingTimeCushion;
-            double plotEndX = maximumTimestampX + Settings.PaddingTimeCushion;
+            double plotStartXExcelOASec = minimumTimestampXExcelOA - Settings.PaddingTimeCushion;
+            double plotEndXExcelOASec = maximumTimestampXExcelOA + Settings.PaddingTimeCushion;
 
             #region Version 1.18: Dynamic Shift of the Kepler Interpolation Frame Range
             if (preservedZoomLimits.HasValue)
             {
                 #region Extracts the exact current active zoom focus coordinates from screen limits
-                double visibleWindowXMin = preservedZoomLimits.Value.HorizontalRange.Min;
-                double visibleWindowXMax = preservedZoomLimits.Value.HorizontalRange.Max;
+                double visibleWindowXMinExcelOA = preservedZoomLimits.Value.HorizontalRange.Min;
+                double visibleWindowXMaxExcelOA = preservedZoomLimits.Value.HorizontalRange.Max;
                 #endregion
                 #region Restricts interpolation boundaries strictly inside the zoom focus window box
-                if (!double.IsNaN(visibleWindowXMin) && !double.IsNaN(visibleWindowXMax))
+                if (!double.IsNaN(visibleWindowXMinExcelOA) && !double.IsNaN(visibleWindowXMaxExcelOA))
                 {
-                    plotStartX = visibleWindowXMin;
-                    plotEndX = visibleWindowXMax;
+                    plotStartXExcelOASec = visibleWindowXMinExcelOA;
+                    plotEndXExcelOASec = visibleWindowXMaxExcelOA;
                 }
                 #endregion
             }
             #endregion
 
             #region Version 1.15: Compute Dynamic Adaptive Step Resolution Bounds
-            double totalSpanTimeSeconds = (maximumTimestampX - minimumTimestampX) * 86400.0;
-            double completedOrbitCycles = totalSpanTimeSeconds / anchor.OrbitalPeriod;
+            double totalSpanTimeUnixSeconds = KeplerOrbitSolver.ToUnixSeconds(maximumTimestampXExcelOA - minimumTimestampXExcelOA);
+            double completedOrbitCycles = totalSpanTimeUnixSeconds / anchor.OrbitalPeriod;
             double idealCalculatedSteps = completedOrbitCycles * Settings.TargetStepsPerOrbitCycle;
 
-            int graphResolutionIntervals = Math.Max(
+            int graphResolutionIntervalsSec = Math.Max(
                 Settings.MinAdaptiveGraphResolution,
                 Math.Min(Settings.MaxAdaptiveGraphResolution, (int)idealCalculatedSteps));
 
-            double calculatedStepWidth = (plotEndX - plotStartX) / graphResolutionIntervals;
+            double calculatedStepWidthSec = (plotEndXExcelOASec - plotStartXExcelOASec) / graphResolutionIntervalsSec;
             #endregion
 
-            double[] curveTimestampsX = new double[graphResolutionIntervals + 1];
-            double[] curveExpectedDistancesY = new double[graphResolutionIntervals + 1];
-            double[] upperVarianceBoundsY1 = new double[graphResolutionIntervals + 1];
-            double[] lowerVarianceBoundsY2 = new double[graphResolutionIntervals + 1];
+            double[] curveTimestampsXSecExcelOA = new double[graphResolutionIntervalsSec + 1];
+            double[] curveExpectedDistancesY = new double[graphResolutionIntervalsSec + 1];
+            double[] upperVarianceBoundsY1 = new double[graphResolutionIntervalsSec + 1];
+            double[] lowerVarianceBoundsY2 = new double[graphResolutionIntervalsSec + 1];
 
             KeplerOrbitSolver.OrbitalElements physicalElements =
                 new KeplerOrbitSolver.OrbitalElements
@@ -212,7 +213,7 @@ namespace ED_TimeSlide
                     SemiMajorAxisMetres = anchor.SemiMajorAxis,
                     Eccentricity = anchor.Eccentricity,
                     OrbitalPeriodSeconds = anchor.OrbitalPeriod,
-                    AnchorTimestamp = anchor.AnchorTimestamp,
+                    AnchorTimestampUnixSec = KeplerOrbitSolver.ToUnixSeconds(anchor.AnchorTimestampUnixSec),
                     AnchorDistanceLs = anchor.AnchorDistance,
                     IsClimbingOutward = anchor.IsClimbingOutward
                 };
@@ -230,11 +231,11 @@ namespace ED_TimeSlide
             for (int i = 0; i < totalPointsCount; i++)
             {
                 #region Compute Real Versus Predicted Geometric Drift Offset
-                long conversionTargetSeconds = (long)(dbTimestamp[i] * 86400.0);
+                long TargetUnixSeconds = KeplerOrbitSolver.ToUnixSeconds(dbTimestampExcelOA[i]);
 
                 double predictedDistanceLS = KeplerOrbitSolver.PredictDistanceAtTimestamp(
                     physicalElements,
-                    conversionTargetSeconds);
+                    TargetUnixSeconds);
 
                 double calculationVarianceLS = Math.Abs(dbDistanceToArrival[i] - predictedDistanceLS);
 
@@ -253,7 +254,7 @@ namespace ED_TimeSlide
                 #region Pass 3.5: Threshold Sorting and Clean Deviation Ingestion
                 if (calculationVariancePercent <= Settings.MaxAllowedErrorPercent)
                 {
-                    cleanPointsX.Add(dbTimestamp[i]);
+                    cleanPointsX.Add(dbTimestampExcelOA[i]);
                     cleanPointsY.Add(dbDistanceToArrival[i]);
 
                     #region Version 1.16: Outlier filter gate prevents anomalies from poisoning bands
@@ -265,24 +266,24 @@ namespace ED_TimeSlide
                 }
                 else
                 {
-                    anomalyPointsX.Add(dbTimestamp[i]);
+                    anomalyPointsX.Add(dbTimestampExcelOA[i]);
                     anomalyPointsY.Add(dbDistanceToArrival[i]);
                 }
                 #endregion
             }
             #endregion
-            #region Pass 4: Interpolate Smooth Curve Rail Nodes & Map Uniform Raw LS Variances
-            for (int step = 0; step <= graphResolutionIntervals; step++)
+            #region Pass 3.5: Interpolate Smooth Curve Rail Nodes & Map Uniform Raw LS Variances
+            for (int step = 0; step <= graphResolutionIntervalsSec; step++)
             {
                 #region Extrapolate Symmetrical Error Band Overlays
-                double currentStepTimeX = plotStartX + (step * calculatedStepWidth);
-                long currentStepSeconds = (long)(currentStepTimeX * 86400.0);
+                double currentStepTimeXExcelOA = plotStartXExcelOASec + (step * calculatedStepWidthSec);
+                long currentStepUnixSeconds = KeplerOrbitSolver.ToUnixSeconds(currentStepTimeXExcelOA);
 
                 double expectedRailDistanceLS = KeplerOrbitSolver.PredictDistanceAtTimestamp(
                     physicalElements,
-                    currentStepSeconds);
+                    currentStepUnixSeconds);
 
-                curveTimestampsX[step] = currentStepTimeX;
+                curveTimestampsXSecExcelOA[step] = currentStepTimeXExcelOA;
                 curveExpectedDistancesY[step] = expectedRailDistanceLS;
 
                 upperVarianceBoundsY1[step] = expectedRailDistanceLS + absoluteMaximumDeviationLS;
@@ -290,7 +291,6 @@ namespace ED_TimeSlide
                 #endregion
             }
             #endregion
-
             #region Pass 3.6: Calculate Cumulative Viewport Data Enveloping Extents (Fixed Sequence)
             double totalEnvelopeMinY = double.MaxValue;
             double totalEnvelopeMaxY = double.MinValue;
@@ -316,28 +316,6 @@ namespace ED_TimeSlide
             }
             #endregion
             #endregion
-
-            #region Pass 4: Interpolate Smooth Curve Rail Nodes & Map Uniform Raw LS Variances
-            for (int step = 0; step <= graphResolutionIntervals; step++)
-            {
-                #region Extrapolate Symmetrical Error Band Overlays
-                double currentStepTimeX = plotStartX + (step * calculatedStepWidth);
-                long currentStepSeconds = (long)(currentStepTimeX * 86400.0);
-
-                double expectedRailDistanceLS = KeplerOrbitSolver.PredictDistanceAtTimestamp(
-                    physicalElements,
-                    currentStepSeconds);
-
-                curveTimestampsX[step] = currentStepTimeX;
-                curveExpectedDistancesY[step] = expectedRailDistanceLS;
-
-                upperVarianceBoundsY1[step] = expectedRailDistanceLS + absoluteMaximumDeviationLS;
-                lowerVarianceBoundsY2[step] = expectedRailDistanceLS - absoluteMaximumDeviationLS;
-                #endregion
-            }
-            #endregion
-
-
             #region Aggregate Active Continuous Path Trajectory Elements (Safely Populated)
             if (upperVarianceBoundsY1.Length > 0)
             {
@@ -348,19 +326,18 @@ namespace ED_TimeSlide
                 totalEnvelopeMinY = Math.Min(totalEnvelopeMinY, lowerVarianceBoundsY2.Min());
             }
             #endregion
-
             #region Pass 5: Bind Data Channels Directly to ScottPlot Controls Viewport
             formsPlotCanvas.Plot.Clear();
 
             #region Version 1.15: Corrected Local Epoch Calendar Conversions (Excel OA Native)
-            double[] curveOADatesX = curveTimestampsX.ToArray();
-            double[] cleanOADatesX = cleanPointsX.ToArray();
-            double[] anomalyOADatesX = anomalyPointsX.ToArray();
+            double[] curveOADatesXExcaleOA = curveTimestampsXSecExcelOA.ToArray();
+            double[] cleanOADatesXExcelOA = cleanPointsX.ToArray();
+            double[] anomalyOADatesXExcelOA = anomalyPointsX.ToArray();
             #endregion
 
             #region Render Shaded Background Tolerance Band Area Series Layer
             var shadedVarianceBand = formsPlotCanvas.Plot.Add.FillY(
-                curveOADatesX,
+                curveOADatesXExcaleOA,
                 upperVarianceBoundsY1,
                 lowerVarianceBoundsY2);
 
@@ -370,7 +347,7 @@ namespace ED_TimeSlide
 
             #region Render Continuous Keplerian Smooth Path Line Rail Layer
             var smoothBlueCurveRail = formsPlotCanvas.Plot.Add.ScatterLine(
-                curveOADatesX,
+                curveOADatesXExcaleOA,
                 curveExpectedDistancesY);
 
             smoothBlueCurveRail.LineColor = ScottPlot.Color.FromHex("#1E90FF");
@@ -380,7 +357,7 @@ namespace ED_TimeSlide
             #region Render Clean Telemetry Observation As Blue Circles
             if (cleanPointsX.Count > 0)
             {
-                var cleanScatter = formsPlotCanvas.Plot.Add.ScatterPoints(cleanOADatesX, cleanPointsY.ToArray());
+                var cleanScatter = formsPlotCanvas.Plot.Add.ScatterPoints(cleanOADatesXExcelOA, cleanPointsY.ToArray());
                 cleanScatter.MarkerShape = MarkerShape.Eks;
                 cleanScatter.MarkerSize = 7;
                 cleanScatter.MarkerColor = ScottPlot.Color.FromHex("#0000FF");
@@ -391,7 +368,7 @@ namespace ED_TimeSlide
             if (anomalyPointsX.Count > 0)
             {
                 var anomalyScatter = formsPlotCanvas.Plot.Add.ScatterPoints(
-                    anomalyOADatesX,
+                    anomalyOADatesXExcelOA,
                     anomalyPointsY.ToArray());
 
                 anomalyScatter.MarkerShape = MarkerShape.Eks;
@@ -400,15 +377,11 @@ namespace ED_TimeSlide
             }
             #endregion
             #endregion
-
-
-
             #region Format Visual Chart Canvas Typography Elements & DateTime Axes
             formsPlotCanvas.Plot.Axes.Bottom.TickGenerator = new ScottPlot.TickGenerators.DateTimeAutomatic();
             formsPlotCanvas.Plot.XLabel("Time (Date Time)");
             formsPlotCanvas.Plot.YLabel("Distance to Arrival (Ls)");
             #endregion
-
             #region Version 1.21: Conditional Viewport Preservation and Canvas Repaint
             try
             {
@@ -437,7 +410,7 @@ namespace ED_TimeSlide
 
                     // Enforces uniform whitespace ratios across flatlines and deep deviations cleanly
                     formsPlotCanvas.Plot.Axes.SetLimitsY(customLockedYMin, customLockedYMax);
-                    formsPlotCanvas.Plot.Axes.SetLimitsX(plotStartX, plotEndX);
+                    formsPlotCanvas.Plot.Axes.SetLimitsX(plotStartXExcelOASec, plotEndXExcelOASec);
                     #endregion
                 }
                 #endregion
@@ -447,9 +420,9 @@ namespace ED_TimeSlide
                 #region Assemble Form Status Strip Output Metrics
                 string calculatedErrorSuffixString = (absoluteMaximumDeviationPercent > Settings.MaxAllowedErrorPercent)
                     ? $">{Settings.MaxAllowedErrorPercent:F3}% Threshold Breach (Peak: {absoluteMaximumDeviationPercent:F2}%)"
-                    : $"{absoluteMaximumDeviationPercent:F2}% (Pass), ScanDB datapoints: {dbTimestamp.Length}";
+                    : $"{absoluteMaximumDeviationPercent:F2}% (Pass), ScanDB datapoints: {dbTimestampExcelOA.Length}";
 
-                lblPlotterStatus.Text = $"[IDLE] Visual plot synchronized successfully. Max Dev: {absoluteMaximumDeviationLS:F4} Ls | Max Error: {calculatedErrorSuffixString}, ScanDB datapoints: {dbTimestamp.Length}";
+                lblPlotterStatus.Text = $"[IDLE] Visual plot synchronized successfully. Max Dev: {absoluteMaximumDeviationLS:F4} Ls | Max Error: {calculatedErrorSuffixString}, ScanDB datapoints: {dbTimestampExcelOA.Length}";
                 #endregion
             }
             catch (Exception ex)
@@ -493,9 +466,9 @@ namespace ED_TimeSlide
                     {
                         CelestialDataset dataset = ScanDataStorageDriver.GetCelestialDataset(systemAddress, bodyID);
                         if ((dataset.Metadata.SystemName != Settings.UnknownData) && (dataset.Metadata.BodyName != Settings.UnknownData)
-                            && (dataset.DistancesToArrival.Length > 0) && (dataset.ExcelOATimestamps.Length > 0))
+                            && (dataset.DistancesToArrival.Length > 0) && (dataset.TimestampsExcelOA.Length > 0))
                         {
-                            RenderOrbitDiagnosticCanvas(anchor, dataset.ExcelOATimestamps, dataset.DistancesToArrival, activeKey, activeZoomLimits);
+                            RenderOrbitDiagnosticCanvas(anchor, dataset.TimestampsExcelOA, dataset.DistancesToArrival, activeKey, activeZoomLimits);
                         }
                         else
                         {

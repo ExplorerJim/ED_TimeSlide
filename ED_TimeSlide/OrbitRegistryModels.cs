@@ -15,9 +15,8 @@ namespace ED_TimeSlide
         public double OrbitalPeriod { get; set; }
 
         // Our 1 definitive trusted anchor point
-        public long AnchorTimestamp { get; set; } // Unix epoch seconds for easier math
+        public long AnchorTimestampUnixSec { get; set; } // Unix epoch seconds for easier math
         public double AnchorDistance { get; set; }
-
         public string VerifiedSourceFile { get; set; }
         public string BodyName { get; set; }
         public string SystemName { get; set; }
@@ -35,13 +34,13 @@ namespace ED_TimeSlide
         public double SemiMajorAxis { get; set; }
         public double Eccentricity { get; set; }
         public double OrbitalPeriod { get; set; }
-
+        public bool IsRetrograde { get; set; }
         public List<StagedPoint> CollectedPoints { get; set; } = new List<StagedPoint>();
     }
 
     public class StagedPoint
     {
-        public long Timestamp { get; set; }
+        public long TimestampUnixSec { get; set; }
         public double Distance { get; set; }
         public string SourceFile { get; set; }
         public string BodyName { get; set; }

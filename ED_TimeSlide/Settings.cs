@@ -19,7 +19,7 @@ namespace ED_TimeSlide
         public static readonly double SpeedOfLightMetersPerSecond = 299792458.0;
         #endregion
         #region Filenames
-        private static readonly string BaseDataDir = @"E:\Elite Dangerous\Data";
+        private static readonly string BaseDataDir = @"D:\Elite Dangerous\Data"; //Office D, Lounge E
         public static readonly string DatabasesDir = Path.Combine(BaseDataDir, "Databases");
         public static readonly string LogsDir = Path.Combine(BaseDataDir, "Logs");
         public static readonly string ErrorsDir = Path.Combine(BaseDataDir, "Errors");
