@@ -8,15 +8,15 @@ using System.Windows.Forms;
 
 namespace ED_TimeSlide
 {
-    public partial class frm_ReduceFileSize : Form
+    public partial class frm_DB_Populator : Form
     {
-        #region 1. Variables, Properties, and Class Fields
+        #region Variables
         private bool _isProcessing;
         private CancellationTokenSource _cts;
         #endregion
 
-        #region 2. Initialization and Constructors
-        public frm_ReduceFileSize()
+        #region Initialization and Constructors
+        public frm_DB_Populator()
         {
             InitializeComponent();
             InitializeDefaultParameters();
@@ -29,7 +29,7 @@ namespace ED_TimeSlide
         }
         #endregion
 
-        #region 3. Public Accessor Interfaces / Events
+        #region Form Events
         private void but_FindFile_Click(object sender, EventArgs e)
         {
             openFileDialog1.Multiselect = true;
@@ -50,14 +50,11 @@ namespace ED_TimeSlide
                 }
             }
         }
-
         private void but_ClearFileNames_Click(object sender, EventArgs e)
         {
             if (_isProcessing) return;
             txb_InputFileNames.Text = "";
         }
-
-        #region 3. Public Accessor Interfaces / Events
         private async void but_Run_Click(object sender, EventArgs e)
         {
             #region UI Parameter Gate Validation
@@ -122,8 +119,6 @@ namespace ED_TimeSlide
             }
             #endregion
         }
-        #endregion
-
         private void but_Abort_Click(object sender, EventArgs e)
         {
             if (!_isProcessing || _cts == null) return;
@@ -133,7 +128,7 @@ namespace ED_TimeSlide
         }
         #endregion
 
-        #region 4. Private Processing Functions / Internal Logic
+        #region Private Functions
         private void ExecuteExtractionWorkflow(string[] files,bool runMultiThreaded,CancellationToken token,IProgress<double> progress)
         {
             #region Sort Target Datasets Chronologically
@@ -241,7 +236,6 @@ namespace ED_TimeSlide
             UpdateLogDisplay("Pipeline processing complete. Relational tables baked securely to storage.");
             #endregion
         }
-
         private void ToggleInterfaceControls(bool state)
         {
             _isProcessing = !state;
@@ -257,7 +251,7 @@ namespace ED_TimeSlide
             });
         }
         #endregion
-        #region 5. Visual UI Contexts (Thread-Safe Form Loggers)
+        #region Visual UI Contexts (Thread-Safe Form Loggers)
         /// <summary>
         /// Pipes operational metric traces directly onto the dashboard's text terminal box.
         /// Performs safe context invoking if dispatched from parallel background worker threads.

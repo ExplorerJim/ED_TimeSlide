@@ -32,7 +32,7 @@ namespace ED_TimeSlide
 
         #region Instances
         Form1 inst_Form1;
-        frm_ReduceFileSize inst_ReduceFileSize;
+        frm_DB_Populator inst_ReduceFileSize;
         frm_Process1 inst_Process1;
         frm_Journey_Tracker inst_Journey_Tracker;
         FormTimeSlipAnalysis inst_FormTimeSlipAnalysis;
@@ -98,7 +98,7 @@ namespace ED_TimeSlide
             inst_OrbitRegistry.LoadRegistriesFromDisk();
             #endregion
 
-            inst_ReduceFileSize = new frm_ReduceFileSize();
+            inst_ReduceFileSize = new frm_DB_Populator();
             inst_ReduceFileSize.MdiParent = this;
 
             inst_Process1 = new frm_Process1();

@@ -164,11 +164,11 @@
     <Compile Include="FormTimeSlipAnalysis.Designer.cs">
       <DependentUpon>FormTimeSlipAnalysis.cs</DependentUpon>
     </Compile>
-    <Compile Include="frm_ReduceFileSize.cs">
+    <Compile Include="frm_DB_Populator.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="frm_ReduceFileSize.Designer.cs">
-      <DependentUpon>frm_ReduceFileSize.cs</DependentUpon>
+    <Compile Include="frm_DB_Populator.Designer.cs">
+      <DependentUpon>frm_DB_Populator.cs</DependentUpon>
     </Compile>
     <Compile Include="frm_Process1.cs">
       <SubType>Form</SubType>
@@ -209,8 +209,8 @@
     <EmbeddedResource Include="FormTimeSlipAnalysis.resx">
       <DependentUpon>FormTimeSlipAnalysis.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="frm_ReduceFileSize.resx">
-      <DependentUpon>frm_ReduceFileSize.cs</DependentUpon>
+    <EmbeddedResource Include="frm_DB_Populator.resx">
+      <DependentUpon>frm_DB_Populator.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="frm_Process1.resx">
       <DependentUpon>frm_Process1.cs</DependentUpon>

@@ -1,6 +1,6 @@
 ﻿namespace ED_TimeSlide
 {
-    partial class frm_ReduceFileSize
+    partial class frm_DB_Populator
     {
         /// <summary>
         /// Required designer variable.
