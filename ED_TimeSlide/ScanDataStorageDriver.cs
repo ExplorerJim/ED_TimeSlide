@@ -413,7 +413,8 @@ namespace ED_TimeSlide
                     bool sizeReached = localBatch.Count >= BatchSizeThreshold;
                     bool timeReached = (DateTime.UtcNow - lastFlushTime).TotalMilliseconds >= BatchTimeoutMilliseconds;
 
-                    if ((sizeReached || timeReached || _ingestionQueue.IsCompleted) && localBatch.Count > 0)
+                    if ((sizeReached || timeReached || _ingestionQueue.IsCompleted) &&
+                        localBatch.Count > 0)
                     {
                         ExecuteBulkTransaction(connection, localBatch);
                         localBatch.Clear();
