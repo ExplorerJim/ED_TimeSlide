@@ -1,7 +1,13 @@
 ﻿using ED_TimeSlide;
+using Microsoft.Data.Sqlite;
+using Newtonsoft.Json;
 using System;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Net.NetworkInformation;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using static ED_TimeSlide.KeplerOrbitSolver;
 
@@ -40,7 +46,6 @@ namespace ED_TimeSlide
         public static readonly double PaddingTimeCushion = 0.05;
         public static readonly double PlotYAxisMarginPercent = 0.10;
         #endregion
-
         #region Scan Database
         public static readonly string ScanDataDbPath = Path.Combine(DatabasesDir, "ScanData.db");
         public static readonly string DBErrorLogPath = Path.Combine(ErrorsDir, "db_errors.txt");
@@ -48,4 +53,5 @@ namespace ED_TimeSlide
         #endregion
     }
 }
+
 

@@ -1,6 +1,6 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 
 namespace ED_TimeSlide
 {
@@ -32,6 +32,7 @@ namespace ED_TimeSlide
         [JsonProperty("timestamp")]
         public DateTime Timestamp { get; set; }
 
+        // Star System Name
         [JsonProperty("StarSystem")]
         public string StarSystem { get; set; }
 
@@ -69,13 +70,20 @@ namespace ED_TimeSlide
         [JsonProperty("SemiMajorAxis")]
         public double SemiMajorAxis { get; set; }
 
-        // BARYCENTER FIX: Extracts the gravitational node orbital radius fallback parameter 
+        // BARYCENTER FIX: Extracts the gravitational node fallback radius parameter
         [JsonProperty("Axis")]
         public double Axis { get; set; }
 
-        // Negative rotation signifys a retrograde body.
+        // Negative rotation signifies a retrograde body
         [JsonProperty("RotationPeriod")]
         public double RotationPeriod { get; set; }
+
+        // 3D Orbital Plane alignment extensions added for multi-body trajectories
+        [JsonProperty("OrbitalInclination")]
+        public double OrbitalInclination { get; set; }
+
+        [JsonProperty("Periapsis")]
+        public double Periapsis { get; set; }
     }
     #endregion
 }

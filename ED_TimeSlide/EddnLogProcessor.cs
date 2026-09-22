@@ -47,7 +47,7 @@ namespace ED_TimeSlide
             }
             #endregion
         }
-
+        
         private static void StreamCompressedArchiveViaWinRar(string archivePath, Action<string> lineCallback)
         {
             #region Setup Temporary Workspace Directory
@@ -127,7 +127,10 @@ namespace ED_TimeSlide
         #endregion
 
         #region Public Static Filename Parsing Utilities
-        /// <summary> Scans an archive or file name string via regex constraints to isolate and extract the standardized upload date string (yyyy-MM-dd). </summary>
+        /// <summary> 
+        /// Scans an archive or file name string via regex constraints to isolate and extract 
+        /// the standardized upload date string (yyyy-MM-dd). 
+        /// </summary>
         public static string ExtractDateFromFilename(string filename)
         {
             #region Regex Date Component Extraction
@@ -139,35 +142,27 @@ namespace ED_TimeSlide
         }
         #endregion
         /// <summary> 
-        /// Returns EddnRecord if line contains a body that fits the filter criteria.
-        /// Centralizes all string mutation layers safely before thread dispatch.
+        /// Decodes a raw log text line, handles uniform prefix pruning, and streams 
+        /// ALL valid scan components out to the transaction queue without early drops.
         /// </summary>
-        public static void ProcessEddnScanLine(string textLine,Action<EddnRecords> successCallback)
+        public static void ProcessEddnScanLine(string textLine, Action<EddnRecords> successCallback)
         {
-            #region Basic structural validation gate matching specification section 3.02.02
+            #region Basic Structural Validation Gate
             if (string.IsNullOrWhiteSpace(textLine)) return;
-
-            bool containsScan = textLine.Contains("\"event\":\"Scan\"") ||
-                                textLine.Contains("\"event\": \"Scan\"");
-
+            bool containsScan = textLine.Contains("\"event\":\"Scan\"") || textLine.Contains("\"event\": \"Scan\"");
             if (!containsScan) return;
             #endregion
 
             try
             {
-                #region Decode the EDDN line
-                var record = Newtonsoft.Json.JsonConvert
-                    .DeserializeObject<EddnRecords>(textLine);
+                #region Decode the EDDN Line
+                var record = Newtonsoft.Json.JsonConvert.DeserializeObject<EddnRecords>(textLine);
                 #endregion
 
-                #region Scan message processing
+                #region Non-Filtering Message Verification
                 if (record?.Message != null && record.Message.EventName == "Scan")
                 {
-                    #region Ignore: Primary Sun, Belt Clusters and Ring Cluster for now
-                    if (record.Message.BodyId == 0) return;
-                    #endregion
-
-                    #region Centralized String Name Cleanup Gate
+                    #region Centralized String Name Pruning Matrix
                     string starSys = record.Message.StarSystem;
                     string bodyName = record.Message.BodyName;
 
@@ -185,21 +180,18 @@ namespace ED_TimeSlide
                     }
                     #endregion
 
-                    if(record.Message.DistanceFromArrivalLS == 0 && record.Message.BodyId != 0)
-                    {
-
-                    }
-
+                    #region Direct Ingestion Pipeline Forward Handshake
                     successCallback(record);
+                    #endregion
                 }
                 #endregion
             }
             catch
             {
-                // TODO: Handle or route corrupt line string logging profiles to \Data\Errors\
+                #region Fallback Structural Error Recovery Exception Block
+                // TODO: record error
+                #endregion
             }
-
-
         }
     }
 }

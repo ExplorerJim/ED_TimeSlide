@@ -30,10 +30,16 @@ namespace ED_TimeSlide
         #endregion
 
         #region Form Events
+        /// <summary>
+        /// Fires when the user clicks the Find File button. Automatically opens the file-system
+        /// dialog, allowing multi-selection of raw JSONL streams or WinRAR archives.
+        /// </summary>
         private void but_FindFile_Click(object sender, EventArgs e)
         {
             openFileDialog1.Multiselect = true;
-            openFileDialog1.Filter = "EDDN Logs|*.jsonl;*.rar;*.bz2;*.zip|All Files|*.*";
+
+            string fileFilter = "EDDN Logs|*.jsonl;*.rar;*.bz2;*.zip|All Files|*.*";
+            openFileDialog1.Filter = fileFilter;
 
             if (openFileDialog1.ShowDialog() == DialogResult.OK)
             {
@@ -45,16 +51,26 @@ namespace ED_TimeSlide
                     }
                     else
                     {
-                        txb_InputFileNames.AppendText(Environment.NewLine + file);
+                        string lineBreak = Environment.NewLine;
+                        txb_InputFileNames.AppendText(lineBreak + file);
                     }
                 }
             }
         }
+        /// <summary>
+        /// Fires when the user clicks the Clear File Names button. Wipes out the file tracking
+        /// textbox primitives if an active ingestion run is not running.
+        /// </summary>
         private void but_ClearFileNames_Click(object sender, EventArgs e)
         {
             if (_isProcessing) return;
             txb_InputFileNames.Text = "";
         }
+        /// <summary>
+        /// Fires when the user clicks the Run Ingestion button. Initializes the async task,
+        /// captures the primary UI thread synchronization context via Progress, and starts 
+        /// the pipeline with a hard-coded MaxDegreeOfParallelism safety gate.
+        /// </summary>
         private async void but_Run_Click(object sender, EventArgs e)
         {
             #region UI Parameter Gate Validation
@@ -81,35 +97,37 @@ namespace ED_TimeSlide
             try
             {
                 ToggleInterfaceControls(false);
-                txb_Status.Text = $"[{DateTime.Now:HH:mm:ss}] Initializing Data Pipelines..." + Environment.NewLine;
 
-                // Reset progress controls on the GUI thread
+                string initTimestamp = $"[{DateTime.Now:HH:mm:ss}]";
+                txb_Status.Text = $"{initTimestamp} Initializing Data Pipelines..." + Environment.NewLine;
+
+                // Safely reset progress control primitives on the GUI thread
                 prg_IngestionProgress.Value = 0;
                 bool useParallelProcessing = chk_MultiThreaded.Checked;
 
                 _cts = new CancellationTokenSource();
                 CancellationToken token = _cts.Token;
 
-                // Setup the cross-thread context progress handler
+                // PROGRESS HANDSHAKE: Automatically captures the current UI SynchronizationContext
                 var progressHandler = new Progress<double>(percentage =>
                 {
                     prg_IngestionProgress.Value = (int)Math.Min(100, Math.Max(0, percentage));
                 });
 
-                // Pass progress reporter down to the extraction engine task
+                // Dispatch extraction workflow out onto a thread-pool task background lane
                 await Task.Run(() =>
                 {
-                    ExecuteExtractionWorkflow(targetFiles, useParallelProcessing, token, progressHandler);
+                    ExecuteExtractionWorkflow(targetFiles,useParallelProcessing,token,progressHandler);
                 }, token);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException ex)
             {
-                UpdateLogDisplay("[ABORTED] Extraction run cancelled by the user.");
+                UpdateLogDisplay($"[ABORTED] Extraction run cancelled by user: {ex.Message}");
                 prg_IngestionProgress.Value = 0;
             }
             catch (Exception ex)
             {
-                UpdateLogDisplay($"[CRITICAL TERMINAL CRASH] Ingestion thread failed: {ex.Message}");
+                UpdateLogDisplay($"[CRITICAL TERMINAL CRASH] Ingestion form thread failed: {ex.Message}");
             }
             finally
             {
@@ -119,6 +137,9 @@ namespace ED_TimeSlide
             }
             #endregion
         }
+        /// Fires when the user clicks the Abort button. Automatically triggers the cancellation
+        /// token source to request an early exit from active background processing lanes.
+        /// </summary>
         private void but_Abort_Click(object sender, EventArgs e)
         {
             if (!_isProcessing || _cts == null) return;
@@ -129,7 +150,12 @@ namespace ED_TimeSlide
         #endregion
 
         #region Private Functions
-        private void ExecuteExtractionWorkflow(string[] files,bool runMultiThreaded,CancellationToken token,IProgress<double> progress)
+        /// <summary>
+        /// Orchestrates the chronologically sorted archive processing routines. Throttles 
+        /// the parallel worker pool to a MaxDegreeOfParallelism of 2 to guarantee system stability
+        /// and prevent memory thrashing when extracting dense monthly WinRAR files.
+        /// </summary>
+        private void ExecuteExtractionWorkflow(string[] files, bool runMultiThreaded, CancellationToken token, IProgress<double> progress)
         {
             #region Sort Target Datasets Chronologically
             UpdateLogDisplay("Sorting target archives chronologically using regex filename keys...");
@@ -163,9 +189,16 @@ namespace ED_TimeSlide
             {
                 if (runMultiThreaded)
                 {
-                    UpdateLogDisplay($"Spawning Parallel.ForEach pipeline across {totalFiles} file targets...");
+                    UpdateLogDisplay($"Spawning throttled Parallel.ForEach pipeline across {totalFiles} targets...");
 
-                    var parallelOptions = new ParallelOptions { CancellationToken = token };
+                    #region Configure Resilient Concurrency Safety Limits
+                    // RAM SHIELD: Limit to 2 concurrent workers to cut external process memory footprint in half
+                    var parallelOptions = new ParallelOptions
+                    {
+                        CancellationToken = token,
+                        MaxDegreeOfParallelism = 2
+                    };
+                    #endregion
 
                     try
                     {
@@ -183,21 +216,21 @@ namespace ED_TimeSlide
                                 });
                             });
 
-                            // Atomically increment completed count and report progress safely
+                            // Atomically increment file progress and push safely via captured UI handler
                             int currentDone = Interlocked.Increment(ref completedFiles);
                             double currentPct = ((double)currentDone / totalFiles) * 100;
                             progress?.Report(currentPct);
                         });
                     }
-                    catch (OperationCanceledException)
+                    catch (OperationCanceledException ex)
                     {
-                        UpdateLogDisplay("[ABORTED] Background worker threads stopped processing files.");
+                        UpdateLogDisplay($"[ABORTED] Parallel file ingestion gracefully canceled: {ex.Message}");
                         return;
                     }
                 }
                 else
                 {
-                    UpdateLogDisplay($"Spawning sequential single-threaded loader loops across {totalFiles} file targets...");
+                    UpdateLogDisplay($"Spawning sequential single-threaded loader loops across {totalFiles} targets...");
 
                     for (int i = 0; i < totalFiles; i++)
                     {
@@ -226,25 +259,27 @@ namespace ED_TimeSlide
                 }
 
                 #region Teardown & Drain Queue Processing Syncs
-                UpdateLogDisplay("All records processed. Draining storage writer queue buffer safely...");
+                UpdateLogDisplay("All archives parsed. Draining storage writer queue buffer safely...");
                 storageDriver.CompleteIngestion();
                 #endregion
             }
 
-            // Force progress bar to fill completely once ingestion is baked safely
+            // Enforce explicit terminal fill confirmation on UI thread
             progress?.Report(100);
             UpdateLogDisplay("Pipeline processing complete. Relational tables baked securely to storage.");
             #endregion
         }
+        /// <summary>
+        /// Marshals control state updates safely back onto the primary form thread layout
+        /// to lock or release structural input parameters during active bulk extraction.
+        /// </summary>
         private void ToggleInterfaceControls(bool state)
         {
             _isProcessing = !state;
 
-            // Marshalling UI thread components layout state safely
             this.Invoke((MethodInvoker)delegate
             {
                 but_Run.Enabled = state;
-                // TODO:but_FindFile.Enabled = state;
                 but_ClearFileNames.Enabled = state;
                 chk_MultiThreaded.Enabled = state;
                 txb_InputFileNames.ReadOnly = !state;
@@ -260,14 +295,27 @@ namespace ED_TimeSlide
         {
             if (txb_Status.InvokeRequired)
             {
-                txb_Status.Invoke((MethodInvoker)delegate
+                try
                 {
-                    UpdateLogDisplay(message);
-                });
+                    txb_Status.Invoke((MethodInvoker)delegate
+                    {
+                        UpdateLogDisplay(message);
+                    });
+                }
+                catch (Exception ex)
+                {
+                    // Fail-safe diagnostic sink to protect tracking threads if form handle drops
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[THREAD OUT CROSS-TALK FAULT] {ex.Message}"
+                    );
+                }
                 return;
             }
 
-            txb_Status.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
+            string timestamp = $"[{DateTime.Now:HH:mm:ss}]";
+            string endBreak = Environment.NewLine;
+
+            txb_Status.AppendText($"{timestamp} {message}{endBreak}");
             txb_Status.SelectionStart = txb_Status.Text.Length;
             txb_Status.ScrollToCaret();
         }

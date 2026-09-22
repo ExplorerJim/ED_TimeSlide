@@ -1,7 +1,5 @@
-﻿using ED_TimeSlide;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using System;
-using System.Windows.Forms;
 
 namespace ED_TimeSlide
 {
@@ -14,8 +12,8 @@ namespace ED_TimeSlide
 
         #region Public Factory Entry Points
         /// <summary>
-        /// Parses a raw EDDN log string line. If it contains valid planetary or 
-        /// stellar scan data, it extracts a fully mapped and sanitized EddnRecords object.
+        /// Parses a raw EDDN log string line. If it contains a valid scan event,
+        /// it maps and returns a sanitized EddnRecords model without applying downstream filters.
         /// </summary>
         public EddnRecords ParseScanLine(string textLine, Action<string, string> logErrorCallback)
         {
@@ -87,7 +85,24 @@ namespace ED_TimeSlide
         }
         #endregion
 
-        #region Public Hierarchy Filtering Verification
+        #region Obsolete Legacy Filtering Suit
+        /// <summary>
+        /// Historical streaming validator. Maintained exclusively for signature compatibility.
+        /// Global processing returns true to let all records stream through to relational tables.
+        /// </summary>
+        public bool IsPrimaryStarOrbiter(ScanMessage msg, Action<string, string> logErrorCallback)
+        {
+            #region Flawless Ingestion Acceptance Pass
+            if (msg == null) return false;
+            return true;
+            #endregion
+        }
+        #endregion
+
+        #region Public Hierarchy Filtering Verification old
+        /*
+         // TODo This function was useful before it was reworkd to let everything through, do i need to keep it
+       
         /// <summary>
         /// Audits the parsed record parents hierarchy tree against the spec guidelines.
         /// Returns true if the body orbits the primary star directly.
@@ -177,6 +192,7 @@ namespace ED_TimeSlide
             return false;
         }
         #endregion
+        */
 
         #endregion
     }
