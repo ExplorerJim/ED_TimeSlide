@@ -30,13 +30,13 @@
         {
             this.menuStrip1 = new System.Windows.Forms.MenuStrip();
             this.form2ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.processingToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.process1ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.journeyTrackerToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.registryEngineToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.fullAutomatedToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.orbitalPlotterToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.processingToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.process1ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.journeyTrackerToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.menuStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -63,28 +63,6 @@
             this.form2ToolStripMenuItem.Text = "Populate ScanDB";
             this.form2ToolStripMenuItem.Click += new System.EventHandler(this.form2ToolStripMenuItem_Click);
             // 
-            // processingToolStripMenuItem
-            // 
-            this.processingToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.process1ToolStripMenuItem});
-            this.processingToolStripMenuItem.Name = "processingToolStripMenuItem";
-            this.processingToolStripMenuItem.Size = new System.Drawing.Size(76, 20);
-            this.processingToolStripMenuItem.Text = "Processing";
-            // 
-            // process1ToolStripMenuItem
-            // 
-            this.process1ToolStripMenuItem.Name = "process1ToolStripMenuItem";
-            this.process1ToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
-            this.process1ToolStripMenuItem.Text = "Process 1";
-            this.process1ToolStripMenuItem.Click += new System.EventHandler(this.process1ToolStripMenuItem_Click);
-            // 
-            // journeyTrackerToolStripMenuItem
-            // 
-            this.journeyTrackerToolStripMenuItem.Name = "journeyTrackerToolStripMenuItem";
-            this.journeyTrackerToolStripMenuItem.Size = new System.Drawing.Size(101, 20);
-            this.journeyTrackerToolStripMenuItem.Text = "Journey Tracker";
-            this.journeyTrackerToolStripMenuItem.Click += new System.EventHandler(this.journeyTrackerToolStripMenuItem_Click);
-            // 
             // registryEngineToolStripMenuItem
             // 
             this.registryEngineToolStripMenuItem.Name = "registryEngineToolStripMenuItem";
@@ -110,9 +88,31 @@
             // orbitalPlotterToolStripMenuItem
             // 
             this.orbitalPlotterToolStripMenuItem.Name = "orbitalPlotterToolStripMenuItem";
-            this.orbitalPlotterToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.orbitalPlotterToolStripMenuItem.Size = new System.Drawing.Size(148, 22);
             this.orbitalPlotterToolStripMenuItem.Text = "Orbital Plotter";
             this.orbitalPlotterToolStripMenuItem.Click += new System.EventHandler(this.orbitalPlotterToolStripMenuItem_Click);
+            // 
+            // processingToolStripMenuItem
+            // 
+            this.processingToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.process1ToolStripMenuItem});
+            this.processingToolStripMenuItem.Name = "processingToolStripMenuItem";
+            this.processingToolStripMenuItem.Size = new System.Drawing.Size(76, 20);
+            this.processingToolStripMenuItem.Text = "Processing";
+            // 
+            // process1ToolStripMenuItem
+            // 
+            this.process1ToolStripMenuItem.Name = "process1ToolStripMenuItem";
+            this.process1ToolStripMenuItem.Size = new System.Drawing.Size(123, 22);
+            this.process1ToolStripMenuItem.Text = "Process 1";
+            this.process1ToolStripMenuItem.Click += new System.EventHandler(this.process1ToolStripMenuItem_Click);
+            // 
+            // journeyTrackerToolStripMenuItem
+            // 
+            this.journeyTrackerToolStripMenuItem.Name = "journeyTrackerToolStripMenuItem";
+            this.journeyTrackerToolStripMenuItem.Size = new System.Drawing.Size(101, 20);
+            this.journeyTrackerToolStripMenuItem.Text = "Journey Tracker";
+            this.journeyTrackerToolStripMenuItem.Click += new System.EventHandler(this.journeyTrackerToolStripMenuItem_Click);
             // 
             // MDIMain
             // 

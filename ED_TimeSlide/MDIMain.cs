@@ -110,10 +110,10 @@ namespace ED_TimeSlide
             inst_FormTimeSlipAnalysis = new FormTimeSlipAnalysis(inst_OrbitRegistry);
             inst_FormTimeSlipAnalysis.MdiParent = this;
 
-            inst_FormRegistryEngine = new FormRegistryEngine(inst_OrbitRegistry);
+            inst_FormRegistryEngine = new FormRegistryEngine();
             inst_FormRegistryEngine.MdiParent = this;
 
-            inst_FormOrbitDiagnosticPlotter = new FormOrbitDiagnosticPlotter(inst_OrbitRegistry);
+            inst_FormOrbitDiagnosticPlotter = new FormOrbitDiagnosticPlotter();
             inst_FormOrbitDiagnosticPlotter.MdiParent = this;
         }
         #region Private Functions - Load Forms

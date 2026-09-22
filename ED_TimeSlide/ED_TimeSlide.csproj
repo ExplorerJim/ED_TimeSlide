@@ -137,6 +137,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BatchConsensusOptimizer.cs" />
     <Compile Include="EddnLogProcessor.cs" />
     <Compile Include="EddnRecords.cs" />
     <Compile Include="ForensicParserEngine.cs" />

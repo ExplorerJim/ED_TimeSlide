@@ -174,7 +174,7 @@
             this.but_Abort.UseVisualStyleBackColor = true;
             this.but_Abort.Click += new System.EventHandler(this.but_Abort_Click);
             // 
-            // frm_ReduceFileSize
+            // frm_DB_Populator
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
@@ -184,7 +184,7 @@
             this.Controls.Add(this.but_Abort);
             this.Controls.Add(this.but_Run);
             this.Controls.Add(this.groupBox1);
-            this.Name = "frm_ReduceFileSize";
+            this.Name = "frm_DB_Populator";
             this.Text = "Populate Scan Database with EDDN data";
             this.groupBox2.ResumeLayout(false);
             this.groupBox2.PerformLayout();

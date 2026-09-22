@@ -28,7 +28,7 @@ namespace ED_TimeSlide
         //public static readonly long RealLifeSimulationLaunchEpochSeconds = 1388534400;
         #endregion
         #region Filenames
-        private static readonly string BaseDataDir = @"E:\Elite Dangerous\Data"; //Office D, Lounge E
+        private static readonly string BaseDataDir = @"D:\Elite Dangerous\Data"; //Office D, Lounge E
         public static readonly string DatabasesDir = Path.Combine(BaseDataDir, "Databases");
         public static readonly string LogsDir = Path.Combine(BaseDataDir, "Logs");
         public static readonly string ErrorsDir = Path.Combine(BaseDataDir, "Errors");
@@ -51,6 +51,9 @@ namespace ED_TimeSlide
         public static readonly string DBErrorLogPath = Path.Combine(ErrorsDir, "db_errors.txt");
         public static readonly string UnknownData = "Unknown";
         #endregion
+
+        public static readonly double MaxAllowedVarianceLs = 4;
+        public static readonly int MinDataPoints = 4;
     }
 }
 
