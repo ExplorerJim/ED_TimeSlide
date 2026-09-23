@@ -34,6 +34,7 @@ namespace ED_TimeSlide
 
             cmbPlanetSelector.Items.Clear();
             lblPlotterStatus.Text = "[IDLE] Awaiting telemetry selection pass...";
+
         }
 
         private void FormOrbitDiagnosticPlotter_Load(object sender, EventArgs e)
@@ -51,34 +52,48 @@ namespace ED_TimeSlide
             {
                 conn.Open();
 
-                // Construct a cross-referenced query linking bodies back to their parent system string names
+                // Construct base cross-referenced query linking bodies back to parent system string names
                 string query = @"
-                    SELECT s.SystemName, b.BodyDBID, b.BodyName, COUNT(d.DataPointDBID) as PointCount
-                    FROM Bodies b
-                    JOIN ObitInfo o ON b.BodyDBID = o.BodyDBID
-                    JOIN DataPoints d ON b.BodyDBID = d.BodyDBID
-                    JOIN StarSystems s ON b.SystemDBID = s.SystemDBID
-                    WHERE o.AnchorTimestamp_UnixSec IS NOT NULL
-                    GROUP BY b.BodyDBID
-                    ORDER BY s.SystemName ASC, b.BodyName ASC;";
+            SELECT s.SystemName, b.BodyDBID, b.BodyName, COUNT(d.DataPointDBID) as PointCount
+            FROM Bodies b
+            JOIN ObitInfo o ON b.BodyDBID = o.BodyDBID
+            JOIN DataPoints d ON b.BodyDBID = d.BodyDBID
+            JOIN StarSystems s ON b.SystemDBID = s.SystemDBID
+            WHERE o.AnchorTimestamp_UnixSec IS NOT NULL";
+
+                // Updated check: Swapped from LIKE to an exact case-insensitive match check
+                if (chb_SystemNameFilter != null && chb_SystemNameFilter.Checked && !string.IsNullOrWhiteSpace(txb_SystemNameFIlter.Text))
+                {
+                    query += " AND s.SystemName = @SystemPattern COLLATE NOCASE";
+                }
+
+                query += @"
+            GROUP BY b.BodyDBID
+            ORDER BY s.SystemName ASC, b.BodyName ASC;";
 
                 using (var cmd = new SqliteCommand(query, conn))
-                using (var reader = cmd.ExecuteReader())
                 {
-                    while (reader.Read())
+                    if (chb_SystemNameFilter != null && chb_SystemNameFilter.Checked && !string.IsNullOrWhiteSpace(txb_SystemNameFIlter.Text))
                     {
-                        int count = Convert.ToInt32(reader["PointCount"]);
+                        // Passing the exact string without wrapping it in wildcard '%' bounds
+                        cmd.Parameters.AddWithValue("@SystemPattern", txb_SystemNameFIlter.Text.Trim());
+                    }
 
-                        // Enforce user telemetry sample limits smoothly across the cross-joined records
-                        if (count >= nud_Min_DataFilter.Value && count <= nud_Max_DataFilter.Value)
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
                         {
-                            string systemName = reader["SystemName"].ToString();
-                            string bodyName = reader["BodyName"].ToString();
-                            int id = Convert.ToInt32(reader["BodyDBID"]);
+                            int count = Convert.ToInt32(reader["PointCount"]);
 
-                            // Interpolating system names with local names to completely eliminate selector duplicate tokens
-                            cmbPlanetSelector.Items.Add($"{systemName} | {bodyName} (Points: {count})");
-                            _parallelBodyDbIds.Add(id);
+                            if (count >= nud_Min_DataFilter.Value && count <= nud_Max_DataFilter.Value)
+                            {
+                                string systemName = reader["SystemName"].ToString();
+                                string bodyName = reader["BodyName"].ToString();
+                                int id = Convert.ToInt32(reader["BodyDBID"]);
+
+                                cmbPlanetSelector.Items.Add($"{systemName} | {bodyName} (Points: {count})");
+                                _parallelBodyDbIds.Add(id);
+                            }
                         }
                     }
                 }
@@ -94,7 +109,7 @@ namespace ED_TimeSlide
                 lblPlotterStatus.Text = "[WARNING] No cross-referenced bodies match within active filter windows.";
             }
         }
-        private void nud_Min_DataFilter_ValueChanged(object sender, EventArgs e)
+        private void but_UpdateComboBox_Click(object sender, EventArgs e)
         {
             PopulatePlanetSelectionComboBox();
         }
@@ -124,6 +139,12 @@ namespace ED_TimeSlide
                 return;
             }
 
+            // Format relational attributes cleanly into single line layout string within txb_BodyInfo control hub
+            if (txb_BodyInfo != null)
+            {
+                txb_BodyInfo.Text = $"BodyDBID: {targetedBodyDbId} | SemiMajorAxis: {anchor.SemiMajorAxis:F2} | Eccentricity: {anchor.Eccentricity:F4} | OrbitalPeriod: {anchor.OrbitalPeriod:F2} | AnchorTimestamp: {anchor.AnchorTimestampUnixSec} | AnchorDistance: {anchor.AnchorDistance:F4} | IsClimbingOutward: {anchor.IsClimbingOutward} | IsRetrograde: {anchor.IsRetrograde}";
+            }
+
             List<double> excelDates = new List<double>();
             List<double> distances = new List<double>();
             LoadBodyTelemetryArrays(targetedBodyDbId, excelDates, distances);
@@ -137,6 +158,7 @@ namespace ED_TimeSlide
                 lblPlotterStatus.Text = "[ERROR] Telemetry extraction fault: No data points logged for this ID.";
             }
         }
+
         private bool TryLoadBodyAnchor(int bodyId, out RelationalAnchor anchor)
         {
             anchor = new RelationalAnchor();
@@ -239,6 +261,7 @@ namespace ED_TimeSlide
             double plotStartXExcelOA = minimumTimestampXExcelOA - Settings.PaddingTimeCushion;
             double plotEndXExcelOA = maximumTimestampXExcelOA + Settings.PaddingTimeCushion;
 
+            // Separate checking routine handles dynamic manual zoom persistence limits cleanly
             if (preservedZoomLimits.HasValue)
             {
                 double focusXMin = preservedZoomLimits.Value.HorizontalRange.Min;
@@ -250,7 +273,6 @@ namespace ED_TimeSlide
                 }
             }
 
-            // Convert Excel OA boundaries to standard integer Unix time signatures for the core Kepler equations
             long startUnixSec = (long)((DateTime.FromOADate(plotStartXExcelOA) - new DateTime(1970, 1, 1)).TotalSeconds);
             long endUnixSec = (long)((DateTime.FromOADate(plotEndXExcelOA) - new DateTime(1970, 1, 1)).TotalSeconds);
             long minTelemetryUnix = (long)((DateTime.FromOADate(minimumTimestampXExcelOA) - new DateTime(1970, 1, 1)).TotalSeconds);
@@ -271,7 +293,6 @@ namespace ED_TimeSlide
             double[] upperVarianceBoundsY1 = new double[graphResolutionIntervals + 1];
             double[] lowerVarianceBoundsY2 = new double[graphResolutionIntervals + 1];
 
-            // Mapping raw database records directly over to the core execution engine elements struct
             var physicalElements = new OrbitalElements
             {
                 SemiMajorAxisMetres = anchor.SemiMajorAxis,
@@ -387,6 +408,31 @@ namespace ED_TimeSlide
         }
         private void BtnUpdateRenderCanvas_Click(object sender, EventArgs e)
         {
+            // Capture live axis scale vectors prior to database calculation pass resets
+            ScottPlot.AxisLimits currentLimits = formsPlotCanvas.Plot.Axes.GetLimits();
+
+            if (cmbPlanetSelector.SelectedItem != null)
+            {
+                int index = cmbPlanetSelector.SelectedIndex;
+                if (index >= 0 && index < _parallelBodyDbIds.Count)
+                {
+                    int targetedBodyDbId = _parallelBodyDbIds[index];
+                    RelationalAnchor anchor;
+                    if (TryLoadBodyAnchor(targetedBodyDbId, out anchor))
+                    {
+                        List<double> excelDates = new List<double>();
+                        List<double> distances = new List<double>();
+                        LoadBodyTelemetryArrays(targetedBodyDbId, excelDates, distances);
+
+                        if (excelDates.Count > 0)
+                        {
+                            RenderOrbitDiagnosticCanvas(anchor, excelDates.ToArray(), distances.ToArray(), targetedBodyDbId, currentLimits);
+                            return;
+                        }
+                    }
+                }
+            }
+
             CmbPlanetSelector_SelectedIndexChanged(sender, e);
         }
         private void OnZoomModeChanged(object sender, EventArgs e)
