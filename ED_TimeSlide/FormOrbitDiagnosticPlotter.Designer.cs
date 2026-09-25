@@ -33,7 +33,7 @@
             this.label1 = new System.Windows.Forms.Label();
             this.groupBox3 = new System.Windows.Forms.GroupBox();
             this.chb_SystemNameFilter = new System.Windows.Forms.CheckBox();
-            this.txb_SystemNameFIlter = new System.Windows.Forms.TextBox();
+            this.txb_SystemNameFilter = new System.Windows.Forms.TextBox();
             this.but_UpdateComboBox = new System.Windows.Forms.Button();
             this.txb_BodyInfo = new System.Windows.Forms.TextBox();
             this.groupBox1.SuspendLayout();
@@ -153,7 +153,7 @@
             // 
             // groupBox2
             // 
-            this.groupBox2.Controls.Add(this.txb_SystemNameFIlter);
+            this.groupBox2.Controls.Add(this.txb_SystemNameFilter);
             this.groupBox2.Controls.Add(this.chb_SystemNameFilter);
             this.groupBox2.Controls.Add(this.but_UpdateComboBox);
             this.groupBox2.Controls.Add(this.nud_Max_DataFilter);
@@ -238,10 +238,10 @@
             // 
             // txb_SystemNameFIlter
             // 
-            this.txb_SystemNameFIlter.Location = new System.Drawing.Point(317, 18);
-            this.txb_SystemNameFIlter.Name = "txb_SystemNameFIlter";
-            this.txb_SystemNameFIlter.Size = new System.Drawing.Size(200, 20);
-            this.txb_SystemNameFIlter.TabIndex = 5;
+            this.txb_SystemNameFilter.Location = new System.Drawing.Point(317, 18);
+            this.txb_SystemNameFilter.Name = "txb_SystemNameFIlter";
+            this.txb_SystemNameFilter.Size = new System.Drawing.Size(200, 20);
+            this.txb_SystemNameFilter.TabIndex = 5;
             // 
             // but_UpdateComboBox
             // 
@@ -314,7 +314,7 @@
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.GroupBox groupBox3;
-        private System.Windows.Forms.TextBox txb_SystemNameFIlter;
+        private System.Windows.Forms.TextBox txb_SystemNameFilter;
         private System.Windows.Forms.CheckBox chb_SystemNameFilter;
         private System.Windows.Forms.Button but_UpdateComboBox;
         private System.Windows.Forms.TextBox txb_BodyInfo;

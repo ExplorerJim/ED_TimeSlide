@@ -84,6 +84,12 @@ namespace ED_TimeSlide
 
         [JsonProperty("Periapsis")]
         public double Periapsis { get; set; }
+
+        [JsonProperty("MeanAnomaly")]
+        public double MeanAnomaly { get; set; }
+
+        [JsonProperty("AscendingNode")]
+        public double AscendingNode { get; set; }
     }
     #endregion
 }

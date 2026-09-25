@@ -51,10 +51,22 @@ namespace ED_TimeSlide
         public static readonly string DBErrorLogPath = Path.Combine(ErrorsDir, "db_errors.txt");
         public static readonly string UnknownData = "Unknown";
         #endregion
-
-        public static readonly double MaxAllowedVarianceLs = 4;
+        #region Phase 2 Optimization Specs & Bounds
+        public static readonly double MaxAllowedVarianceLs = 8;
         public static readonly int MinDataPoints = 4;
+        #endregion
+        #region Central Database Broker Connection Strings & Stability Config
+        public static readonly int ConnectionDefaultTimeoutSec = 5;
+        public static readonly int ConnectionBusyTimeoutMs = 5000;
+        #endregion
+        #region Phase 2.2 Split Log Paths
+        public static readonly string LogLowDensityPath = Path.Combine(LogsDir, "SystemInitialization_LowDensity.txt");
+        public static readonly string LogDivergencePath = Path.Combine(LogsDir, "SystemInitialization_Divergence.txt");
+        #endregion
+        #region Bulk Telemetry Pipeline Thresholds
+        public static readonly int QueueBoundedCapacity = 100000;
+        public static readonly int BatchSizeThreshold = 5000;
+        public static readonly int BatchTimeoutMilliseconds = 1000;
+        #endregion
     }
 }
-
-
