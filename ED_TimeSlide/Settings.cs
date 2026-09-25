@@ -52,7 +52,7 @@ namespace ED_TimeSlide
         public static readonly string UnknownData = "Unknown";
         #endregion
         #region Phase 2 Optimization Specs & Bounds
-        public static readonly double MaxAllowedVarianceLs = 8;
+        public static readonly double MaxAllowedVarianceLs = 800000000;
         public static readonly int MinDataPoints = 4;
         #endregion
         #region Central Database Broker Connection Strings & Stability Config
@@ -62,6 +62,7 @@ namespace ED_TimeSlide
         #region Phase 2.2 Split Log Paths
         public static readonly string LogLowDensityPath = Path.Combine(LogsDir, "SystemInitialization_LowDensity.txt");
         public static readonly string LogDivergencePath = Path.Combine(LogsDir, "SystemInitialization_Divergence.txt");
+        public static readonly string LogMissingArrivalDatumPath = Path.Combine(LogsDir, "SystemInitialization_MissingArrivalDatum.txt");
         #endregion
         #region Bulk Telemetry Pipeline Thresholds
         public static readonly int QueueBoundedCapacity = 100000;

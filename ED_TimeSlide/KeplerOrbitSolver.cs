@@ -15,8 +15,29 @@ namespace ED_TimeSlide
             public double AnchorDistanceLs;
             public bool IsClimbingOutward;
             public bool IsRetrograde;
+            // Added 3D rotation vectors exactly matching Elite Dangerous naming
+            public double OrbitalInclination;   // Stored in Degrees
+            public double Periapsis;            // Argument of Periapsis (Degrees)
+            public double MeanAnomaly;          // Stored at Anchor/Scan timeline (Degrees)
+            public double AscendingNode;       // Longitude of Ascending Node (Degrees)
         }
-        #endregion        
+
+
+        public struct Vector3D
+        {
+            public double X;
+            public double Y;
+            public double Z;
+
+            public Vector3D(double x, double y, double z) { X = x; Y = y; Z = z; }
+
+            public static Vector3D operator +(Vector3D a, Vector3D b) => new Vector3D(a.X + b.X, a.Y + b.Y, a.Z + b.Z);
+            public static Vector3D operator -(Vector3D a, Vector3D b) => new Vector3D(a.X - b.X, a.Y - b.Y, a.Z - b.Z);
+
+            public double Magnitude() => Math.Sqrt(X * X + Y * Y + Z * Z);
+            public static double Distance(Vector3D a, Vector3D b) => (a - b).Magnitude();
+        }
+        #endregion
 
         #region Public Functions
         /// <summary>
@@ -122,12 +143,88 @@ namespace ED_TimeSlide
         }
         public static long ToUnixSeconds(this double dateTimeExcelOA)
         {
-            return (long)((dateTimeExcelOA-25569) * 86400.0);
+            return (long)((dateTimeExcelOA - 25569) * 86400.0);
         }
         public static long ToExcelOA(this double dateTimeUnixSec)
         {
             return (long)(dateTimeUnixSec / 86400.0) + 25569;
         }
         #endregion
+
+        //New
+        /// <summary>
+        /// Computes the 3D position vector of a child relative to its immediate parent node at target time t.
+        /// </summary>
+        public static Vector3D Compute3DLocalPosition(OrbitalElements elements, long currentUnixSec, long anchorUnixSec)
+        {
+            // If evaluating an abstract barycenter node with a 0 radius, bypass the planet orbit math
+            if (elements.SemiMajorAxisMetres == 0.0 && elements.AnchorDistanceLs > 0.0)
+            {
+                // Dynamic systemic reorientation check: keeps the cluster facing the arrival star vector
+                double directionSign = (elements.AnchorDistanceLs > 2000.0) ? -1.0 : 1.0;
+                return new Vector3D(directionSign * elements.AnchorDistanceLs, 0, 0);
+            }
+
+            if (elements.SemiMajorAxisMetres <= 0) return new Vector3D(0, 0, 0);
+ 
+            double degToRad = Math.PI / 180.0;
+            double inclination = elements.OrbitalInclination * degToRad;
+            double argPeriapsis = elements.Periapsis * degToRad;
+            double longAscNode = elements.AscendingNode * degToRad;
+
+            double deltaTime = (double)(currentUnixSec - anchorUnixSec);
+            double meanMotion = (2.0 * Math.PI) / elements.OrbitalPeriodSeconds;
+
+            // Pure Database Driven Phasing: Let the background solver toggle the rotation signs naturally
+            if (elements.IsRetrograde)
+            {
+                meanMotion = -meanMotion;
+            }
+
+            double meanAnomaly = (elements.MeanAnomaly * degToRad) + (meanMotion * deltaTime);
+
+            // =================================================================================
+            // RESTORED CODE: Core angle boundaries normalization within (-PI, PI]
+            // =================================================================================
+            meanAnomaly = meanAnomaly % (2.0 * Math.PI);
+            if (meanAnomaly < -Math.PI) meanAnomaly += (2.0 * Math.PI);
+            if (meanAnomaly > Math.PI) meanAnomaly -= (2.0 * Math.PI);
+
+            // Newton-Raphson Solver for Eccentric Anomaly (E)
+            double eccentricAnomaly = meanAnomaly;
+            for (int i = 0; i < 8; i++)
+            {
+                double deltaE = (eccentricAnomaly - elements.Eccentricity * Math.Sin(eccentricAnomaly) - meanAnomaly) /
+                               (1.0 - elements.Eccentricity * Math.Cos(eccentricAnomaly));
+                eccentricAnomaly -= deltaE;
+                if (Math.Abs(deltaE) < 1e-7) break;
+            }
+
+            // Calculate coordinates in the 2D orbital perifocal plane rail (Light Seconds)
+            double aLs = elements.SemiMajorAxisMetres / 299792458.0;
+
+            double xPlane = aLs * (Math.Cos(eccentricAnomaly) - elements.Eccentricity);
+            double yPlane = aLs * Math.Sqrt(1.0 - elements.Eccentricity * elements.Eccentricity) * Math.Sin(eccentricAnomaly);
+
+            // Execute 3D coordinate frame rotations using periapsis, inclination, and ascending node
+            double cosOmega = Math.Cos(longAscNode);
+            double sinOmega = Math.Sin(longAscNode);
+            double cosOmegaArg = Math.Cos(argPeriapsis);
+            double sinOmegaArg = Math.Sin(argPeriapsis);
+            double cosInc = Math.Cos(inclination);
+            double sinInc = Math.Sin(inclination);
+
+            double xGlobal = xPlane * (cosOmega * cosOmegaArg - sinOmega * sinOmegaArg * cosInc) -
+                             yPlane * (cosOmega * sinOmegaArg + sinOmega * cosOmegaArg * cosInc);
+
+            double yGlobal = xPlane * (sinOmega * cosOmegaArg + cosOmega * sinOmegaArg * cosInc) -
+                             yPlane * (sinOmega * sinOmegaArg - cosOmega * cosOmegaArg * cosInc);
+
+            double zGlobal = xPlane * (sinOmegaArg * sinInc) +
+                             yPlane * (cosOmegaArg * sinInc);
+
+            return new Vector3D(xGlobal, yGlobal, zGlobal);
+        }
     }
+
 }

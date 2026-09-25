@@ -36,11 +36,22 @@ namespace ED_TimeSlide
             // 2. Perform initialization tasks
             PerformStartupTasks();
 
-            // 3. Close the splash screen
+            // 3. Create the main application form instance FIRST
+            MDIMain mainForm = new MDIMain();
+
+            // 4. Close the splash screen securely
             CloseSplashScreen();
 
-            // 4. Run the main application form
-            Application.Run(new MDIMain());
+            // 5. Explicitly force focus onto your main form before running the app loop
+            mainForm.WindowState = FormWindowState.Maximized;
+            mainForm.Load += (s, e) =>
+            {
+                mainForm.Activate();
+                mainForm.Focus();
+            };
+
+            // 6. Run the application
+            Application.Run(mainForm);
         }
 
         #region Private Static Helper Engines
@@ -55,20 +66,22 @@ namespace ED_TimeSlide
 
         private static void StartSplashScreen()
         {
-            splashThread = new Thread(() =>
+            // AutoResetEvent ensures thread synchronization without a resource-heavy spinning loop
+            using (var handleCreatedEvent = new AutoResetEvent(false))
             {
-                splashForm = new SplashForm();
-                Application.Run(splashForm);
-            });
+                splashThread = new Thread(() =>
+                {
+                    splashForm = new SplashForm();
+                    splashForm.HandleCreated += (s, e) => handleCreatedEvent.Set();
+                    Application.Run(splashForm);
+                });
 
-            splashThread.SetApartmentState(ApartmentState.STA);
-            splashThread.IsBackground = true;
-            splashThread.Start();
+                splashThread.SetApartmentState(ApartmentState.STA);
+                splashThread.IsBackground = true;
+                splashThread.Start();
 
-            // Wait brief moment to guarantee the window handle has fully generated
-            while (splashForm == null || !splashForm.IsHandleCreated)
-            {
-                Thread.Sleep(50);
+                // Safe synchronization lock: blocks the main thread cleanly for a maximum of 3 seconds
+                handleCreatedEvent.WaitOne(3000);
             }
         }
 

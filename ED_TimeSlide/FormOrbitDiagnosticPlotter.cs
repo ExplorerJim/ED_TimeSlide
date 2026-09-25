@@ -274,16 +274,8 @@ namespace ED_TimeSlide
             double[] upperVarianceBoundsY1 = new double[graphResolutionIntervals + 1];
             double[] lowerVarianceBoundsY2 = new double[graphResolutionIntervals + 1];
 
-            var physicalElements = new OrbitalElements
-            {
-                SemiMajorAxisMetres = anchor.SemiMajorAxis,
-                Eccentricity = anchor.Eccentricity,
-                OrbitalPeriodSeconds = anchor.OrbitalPeriod,
-                AnchorTimestampUnixSec = anchor.AnchorTimestampUnixSec,
-                AnchorDistanceLs = anchor.AnchorDistance,
-                IsClimbingOutward = anchor.IsClimbingOutward,
-                IsRetrograde = anchor.IsRetrograde
-            };
+            // Resolve the active arrival datum star body inside the local system mapping
+            int plotterArrivalStarId = ResolvePlotterArrivalBodyId(bodyId);
 
             double absoluteMaximumDeviationLS = 0.0;
             double absoluteMaximumDeviationPercent = 0.0;
@@ -296,7 +288,11 @@ namespace ED_TimeSlide
             for (int i = 0; i < totalPointsCount; i++)
             {
                 long targetUnixSeconds = (long)((DateTime.FromOADate(dbTimestampExcelOA[i]) - new DateTime(1970, 1, 1)).TotalSeconds);
-                double predDist = KeplerOrbitSolver.PredictDistanceAtTimestamp(physicalElements, targetUnixSeconds);
+
+                // Calculate true 3D relative distance vector matching the target point timeline
+                Vector3D pTargetPt = ComputePlotterGlobalVector(bodyId, targetUnixSeconds, anchor);
+                Vector3D pArrivalPt = ComputePlotterGlobalVector(plotterArrivalStarId, targetUnixSeconds, anchor);
+                double predDist = Vector3D.Distance(pTargetPt, pArrivalPt);
 
                 double variance = Math.Abs(dbDistanceToArrival[i] - predDist);
                 double variancePct = (predDist > 0.0) ? (variance / predDist) * 100.0 : 0.0;
@@ -321,7 +317,10 @@ namespace ED_TimeSlide
                 double currentStepTimeExcelOA = plotStartXExcelOA + (step * calculatedStepWidthExcelOA);
                 long currentUnix = (long)((DateTime.FromOADate(currentStepTimeExcelOA) - new DateTime(1970, 1, 1)).TotalSeconds);
 
-                double expectedRailDistanceLS = KeplerOrbitSolver.PredictDistanceAtTimestamp(physicalElements, currentUnix);
+                // Construct continuous smooth curve line vectors using 3D relative math
+                Vector3D pCurveTarget = ComputePlotterGlobalVector(bodyId, currentUnix, anchor);
+                Vector3D pCurveArrival = ComputePlotterGlobalVector(plotterArrivalStarId, currentUnix, anchor);
+                double expectedRailDistanceLS = Vector3D.Distance(pCurveTarget, pCurveArrival);
 
                 curveTimestampsExcelOA[step] = currentStepTimeExcelOA;
                 curveExpectedDistancesY[step] = expectedRailDistanceLS;
@@ -404,6 +403,129 @@ namespace ED_TimeSlide
             formsPlotCanvas.Refresh();
         }
         #endregion
+
+        // new 
+        private List<int> LookupPlotterAncestryChain(int bodyDbId)
+        {
+            var chainIds = new List<int>();
+            using (var conn = new SqliteConnection(_connectionString))
+            {
+                conn.Open();
+                string query = @"
+                    SELECT ParentBodyDBID FROM BaryCentreNodes 
+                    WHERE ChildBodyDBID = @BodyID 
+                    ORDER BY HierarchyDepth ASC;";
+
+                using (var cmd = new SqliteCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@BodyID", bodyDbId);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            chainIds.Add(Convert.ToInt32(reader["ParentBodyDBID"]));
+                        }
+                    }
+                }
+            }
+            return chainIds;
+        }
+        private int ResolvePlotterArrivalBodyId(int currentBodyDbId)
+        {
+            using (var conn = new SqliteConnection(_connectionString))
+            {
+                conn.Open();
+                string query = @"
+                    SELECT d.BodyDBID 
+                    FROM DataPoints d
+                    JOIN Bodies b ON d.BodyDBID = b.BodyDBID
+                    WHERE d.DistanceToArrival = 0.0
+                      AND b.SystemDBID = (SELECT SystemDBID FROM Bodies WHERE BodyDBID = @BodyID LIMIT 1)
+                    LIMIT 1;";
+
+                using (var cmd = new SqliteCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@BodyID", currentBodyDbId);
+                    var result = cmd.ExecuteScalar();
+                    return result != null ? Convert.ToInt32(result) : 0;
+                }
+            }
+        }
+        private bool TryLoadPlotterElements(int bodyId, out OrbitalElements elements)
+        {
+            elements = new OrbitalElements();
+            using (var conn = new SqliteConnection(_connectionString))
+            {
+                conn.Open();
+                string query = @"
+                    SELECT SemiMajorAxis, Eccentricity, OrbitalPeriod_Sec, 
+                           AnchorTimestamp_UnixSec, AnchorDistance_Ls,
+                           IsClimbingOutward, IsRetrograde,
+                           OrbitalInclination, Periapsis, MeanAnomaly, AscendingNode
+                    FROM ObitInfo 
+                    WHERE BodyDBID = @ID;";
+
+                using (var cmd = new SqliteCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@ID", bodyId);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            elements.SemiMajorAxisMetres = Convert.ToDouble(reader["SemiMajorAxis"]);
+                            elements.Eccentricity = Convert.ToDouble(reader["Eccentricity"]);
+                            elements.OrbitalPeriodSeconds = Convert.ToDouble(reader["OrbitalPeriod_Sec"]);
+
+                            if (reader["AnchorTimestamp_UnixSec"] != DBNull.Value)
+                                elements.AnchorTimestampUnixSec = Convert.ToInt64(reader["AnchorTimestamp_UnixSec"]);
+
+                            if (reader["AnchorDistance_Ls"] != DBNull.Value)
+                                elements.AnchorDistanceLs = Convert.ToDouble(reader["AnchorDistance_Ls"]);
+
+                            if (reader["IsClimbingOutward"] != DBNull.Value)
+                                elements.IsClimbingOutward = Convert.ToBoolean(reader["IsClimbingOutward"]);
+
+                            if (reader["IsRetrograde"] != DBNull.Value)
+                                elements.IsRetrograde = Convert.ToBoolean(reader["IsRetrograde"]);
+
+                            elements.OrbitalInclination = Convert.ToDouble(reader["OrbitalInclination"]);
+                            elements.Periapsis = Convert.ToDouble(reader["Periapsis"]);
+                            elements.MeanAnomaly = Convert.ToDouble(reader["MeanAnomaly"]);
+                            elements.AscendingNode = Convert.ToDouble(reader["AscendingNode"]);
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+        private Vector3D ComputePlotterGlobalVector(int bodyDbId, long targetUnixSec, RelationalAnchor activeAnchor)
+        {
+            Vector3D sumVector = new Vector3D(0, 0, 0);
+
+            // 1. Process the base target body orbit path first
+            OrbitalElements targetEl;
+            if (TryLoadPlotterElements(bodyDbId, out targetEl))
+            {
+                targetEl.AnchorTimestampUnixSec = activeAnchor.AnchorTimestampUnixSec;
+                targetEl.AnchorDistanceLs = activeAnchor.AnchorDistance;
+
+                sumVector += KeplerOrbitSolver.Compute3DLocalPosition(targetEl, targetUnixSec, targetEl.AnchorTimestampUnixSec);
+            }
+
+            // 2. Climb horizontally outwards running pure 3D local rotations across all layers
+            List<int> parentsChain = LookupPlotterAncestryChain(bodyDbId);
+            foreach (int parentId in parentsChain)
+            {
+                OrbitalElements parentEl;
+                if (TryLoadPlotterElements(parentId, out parentEl))
+                {
+                    sumVector += KeplerOrbitSolver.Compute3DLocalPosition(parentEl, targetUnixSec, parentEl.AnchorTimestampUnixSec);
+                }
+            }
+
+            return sumVector;
+        }
 
         // TODO move out, maybe
         private bool TryLoadBodyAnchor(int bodyId, out RelationalAnchor anchor)
