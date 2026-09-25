@@ -16,32 +16,20 @@ namespace MyWinFormsApp
             InitializeComponent();
             lblStatus.Parent = pictureBox1;
             lblStatus.BackColor = Color.Transparent;
-
-            // Remove native OS styling so ForeColor and BackColor work perfectly
-            SetWindowTheme(progressBar.Handle, "", "");
-
-            // Define your custom appearance colors
-            //progressBar.ForeColor = Color.Orange; // Progress fill color
-            progressBar.BackColor = Color.DarkGray; // Empty track color
         }
 
         /// <summary>
         /// Thread-safely updates the status text and progress bar level.
         /// </summary>
-        public void UpdateStatus(string message, int progressPercentage)
+        public void UpdateStatus(string message)
         {
             if (this.InvokeRequired)
             {
-                this.BeginInvoke(new Action(() => UpdateStatus(message, progressPercentage)));
+                this.BeginInvoke(new Action(() => UpdateStatus(message)));
                 return;
             }
 
             lblStatus.Text = message;
-
-            if (progressPercentage >= progressBar.Minimum && progressPercentage <= progressBar.Maximum)
-            {
-                progressBar.Value = progressPercentage;
-            }
         }
     }
 }

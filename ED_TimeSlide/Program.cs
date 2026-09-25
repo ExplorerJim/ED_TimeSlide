@@ -117,7 +117,7 @@ namespace ED_TimeSlide
         {
             if (splashForm != null && !splashForm.IsDisposed)
             {
-                splashForm.UpdateStatus(text, percent);
+                splashForm.UpdateStatus(text);
             }
         }
 

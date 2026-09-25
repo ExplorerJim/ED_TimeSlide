@@ -15,7 +15,6 @@ namespace ED_TimeSlide
         #region Variables
         private int skippedSystemsCount = 0;
         #endregion
-
         public FormRegistryEngine()
         {
             InitializeComponent();
@@ -40,7 +39,7 @@ namespace ED_TimeSlide
             {
                 try
                 {
-                    var optimizer = new BatchConsensusOptimizer(dbPath);
+                    var optimizer = new ScanDBPhase2(dbPath);
 
                     optimizer.ExecuteGlobalOptimizationPass((message, count, total) =>
                     {

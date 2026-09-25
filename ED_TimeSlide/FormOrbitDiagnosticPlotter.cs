@@ -8,6 +8,7 @@ using System.Linq;
 using System.Windows.Forms;
 using static ED_TimeSlide.KeplerOrbitSolver;
 
+
 namespace ED_TimeSlide
 {
     public partial class FormOrbitDiagnosticPlotter : Form
@@ -25,46 +26,136 @@ namespace ED_TimeSlide
         }
         #endregion
 
-        #region Variables
-        // Phase 2.0 Central Gatekeeper Infrastructure Mapping
-        private readonly ScanDatabaseBroker _databaseBroker;
+        #region Variable
+        private readonly string _connectionString;
         private readonly List<int> _parallelBodyDbIds = new List<int>();
         #endregion
 
         public FormOrbitDiagnosticPlotter()
         {
             InitializeComponent();
-
-            // Attaching cleanly to centralized performance gatekeeper
-            _databaseBroker = new ScanDatabaseBroker();
+            _connectionString = $"Data Source={Settings.ScanDataDbPath};";
 
             cmbPlanetSelector.Items.Clear();
             lblPlotterStatus.Text = "[IDLE] Awaiting telemetry selection pass...";
         }
 
+        #region Form Events
         private void FormOrbitDiagnosticPlotter_Load(object sender, EventArgs e)
         {
-            //PopulatePlanetSelectionComboBox();
+            PopulatePlanetSelectionComboBox();
         }
+        private void BtnNextPlanet_Click(object sender, EventArgs e)
+        {
+            if (cmbPlanetSelector.Items.Count == 0) return;
+            cmbPlanetSelector.SelectedIndex = (cmbPlanetSelector.SelectedIndex >= cmbPlanetSelector.Items.Count - 1) ? 0 : cmbPlanetSelector.SelectedIndex + 1;
+        }
+        private void BtnPreviousPlanet_Click(object sender, EventArgs e)
+        {
+            if (cmbPlanetSelector.Items.Count == 0) return;
+            cmbPlanetSelector.SelectedIndex = (cmbPlanetSelector.SelectedIndex <= 0) ? cmbPlanetSelector.Items.Count - 1 : cmbPlanetSelector.SelectedIndex - 1;
+        }
+        private void BtnUpdateRenderCanvas_Click(object sender, EventArgs e)
+        {
+            // Capture live axis scale vectors prior to database calculation pass resets
+            ScottPlot.AxisLimits currentLimits = formsPlotCanvas.Plot.Axes.GetLimits();
 
-        #region Block 1: UI Handlers and Relational Metadata Dropdown Loader
+            if (cmbPlanetSelector.SelectedItem != null)
+            {
+                int index = cmbPlanetSelector.SelectedIndex;
+                if (index >= 0 && index < _parallelBodyDbIds.Count)
+                {
+                    int targetedBodyDbId = _parallelBodyDbIds[index];
+                    RelationalAnchor anchor;
+                    if (TryLoadBodyAnchor(targetedBodyDbId, out anchor))
+                    {
+                        List<double> excelDates = new List<double>();
+                        List<double> distances = new List<double>();
+                        LoadBodyTelemetryArrays(targetedBodyDbId, excelDates, distances);
+
+                        if (excelDates.Count > 0)
+                        {
+                            RenderOrbitDiagnosticCanvas(anchor, excelDates.ToArray(), distances.ToArray(), targetedBodyDbId, currentLimits);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            CmbPlanetSelector_SelectedIndexChanged(sender, e);
+        }
+        private void but_UpdateComboBox_Click(object sender, EventArgs e)
+        {
+            PopulatePlanetSelectionComboBox();
+        }
+        private void OnZoomModeChanged(object sender, EventArgs e)
+        {
+            if (sender is RadioButton rdo && rdo.Checked) ApplyZoomConstraints();
+        }
+        private void CmbPlanetSelector_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (cmbPlanetSelector.SelectedItem == null) return;
+
+            int index = cmbPlanetSelector.SelectedIndex;
+            if (index < 0 || index >= _parallelBodyDbIds.Count) return;
+
+            int targetedBodyDbId = _parallelBodyDbIds[index];
+            formsPlotCanvas.Plot.Axes.Rules.Clear();
+
+            if (rdoZoomStandard != null && !rdoZoomStandard.Checked)
+            {
+                rdoZoomStandard.Checked = true;
+            }
+
+            lblPlotterStatus.Text = $"[LOADING] Querying telemetry parameters for BodyDBID: {targetedBodyDbId}...";
+
+            RelationalAnchor anchor;
+            if (!TryLoadBodyAnchor(targetedBodyDbId, out anchor))
+            {
+                lblPlotterStatus.Text = "[ERROR] Selected calibration metrics could not be pulled from ObitInfo.";
+                return;
+            }
+
+            // Format relational attributes cleanly into single line layout string within txb_BodyInfo control hub
+            if (txb_BodyInfo != null)
+            {
+                txb_BodyInfo.Text = $"BodyDBID: {targetedBodyDbId} | SemiMajorAxis: {anchor.SemiMajorAxis:F2} | Eccentricity: {anchor.Eccentricity:F4} | OrbitalPeriod: {anchor.OrbitalPeriod:F2} | AnchorTimestamp: {anchor.AnchorTimestampUnixSec} | AnchorDistance: {anchor.AnchorDistance:F4} | IsClimbingOutward: {anchor.IsClimbingOutward} | IsRetrograde: {anchor.IsRetrograde}";
+            }
+
+            List<double> excelDates = new List<double>();
+            List<double> distances = new List<double>();
+            LoadBodyTelemetryArrays(targetedBodyDbId, excelDates, distances);
+
+            if (excelDates.Count > 0)
+            {
+                RenderOrbitDiagnosticCanvas(anchor, excelDates.ToArray(), distances.ToArray(), targetedBodyDbId);
+            }
+            else
+            {
+                lblPlotterStatus.Text = "[ERROR] Telemetry extraction fault: No data points logged for this ID.";
+            }
+        }
+        #endregion
+
+        #region Private Functions
         private void PopulatePlanetSelectionComboBox()
         {
             cmbPlanetSelector.SelectedIndexChanged -= CmbPlanetSelector_SelectedIndexChanged;
             cmbPlanetSelector.Items.Clear();
             _parallelBodyDbIds.Clear();
 
-            // Explicit connection allocations are wiped out; querying securely via broker handle
-            using (var conn = _databaseBroker.OpenConnection())
+            using (var conn = new SqliteConnection(_connectionString))
             {
+                conn.Open();
+
                 // Construct base cross-referenced query linking bodies back to parent system string names
                 string query = @"
-                    SELECT s.SystemName, b.BodyDBID, b.BodyName, COUNT(d.DataPointDBID) as PointCount
-                    FROM Bodies b
-                    JOIN ObitInfo o ON b.BodyDBID = o.BodyDBID
-                    JOIN DataPoints d ON b.BodyDBID = d.BodyDBID
-                    JOIN StarSystems s ON b.SystemDBID = s.SystemDBID
-                    WHERE o.AnchorTimestamp_UnixSec IS NOT NULL";
+            SELECT s.SystemName, b.BodyDBID, b.BodyName, COUNT(d.DataPointDBID) as PointCount
+            FROM Bodies b
+            JOIN ObitInfo o ON b.BodyDBID = o.BodyDBID
+            JOIN DataPoints d ON b.BodyDBID = d.BodyDBID
+            JOIN StarSystems s ON b.SystemDBID = s.SystemDBID
+            WHERE o.AnchorTimestamp_UnixSec IS NOT NULL";
 
                 // Updated check: Swapped from LIKE to an exact case-insensitive match check
                 if (chb_SystemNameFilter != null && chb_SystemNameFilter.Checked && !string.IsNullOrWhiteSpace(txb_SystemNameFilter.Text))
@@ -73,8 +164,8 @@ namespace ED_TimeSlide
                 }
 
                 query += @"
-                    GROUP BY b.BodyDBID
-                    ORDER BY s.SystemName ASC, b.BodyName ASC;";
+            GROUP BY b.BodyDBID
+            ORDER BY s.SystemName ASC, b.BodyName ASC;";
 
                 using (var cmd = new SqliteCommand(query, conn))
                 {
@@ -114,121 +205,37 @@ namespace ED_TimeSlide
                 lblPlotterStatus.Text = "[WARNING] No cross-referenced bodies match within active filter windows.";
             }
         }
-
-        private void but_UpdateComboBox_Click(object sender, EventArgs e)
+        
+        private void LoadBodyTelemetryArrays(int bodyId, List<double> excelDates, List<double> distances)
         {
-            PopulatePlanetSelectionComboBox();
-        }
-        #endregion
-        #region Block 2: Selection Invalidation and Relational Extraction Layers
-        private void CmbPlanetSelector_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            if (cmbPlanetSelector.SelectedItem == null) return;
-
-            int index = cmbPlanetSelector.SelectedIndex;
-            if (index < 0 || index >= _parallelBodyDbIds.Count) return;
-
-            int targetedBodyDbId = _parallelBodyDbIds[index];
-            formsPlotCanvas.Plot.Axes.Rules.Clear();
-
-            if (rdoZoomStandard != null && !rdoZoomStandard.Checked)
+            using (var conn = new SqliteConnection(_connectionString))
             {
-                rdoZoomStandard.Checked = true;
-            }
-
-            lblPlotterStatus.Text = $"[LOADING] Querying telemetry parameters for BodyDBID: {targetedBodyDbId}...";
-
-            RelationalAnchor anchor;
-            if (!TryLoadBodyAnchor(targetedBodyDbId, out anchor))
-            {
-                lblPlotterStatus.Text = "[ERROR] Selected calibration metrics could not be pulled from ObitInfo.";
-                return;
-            }
-
-            // Format relational attributes cleanly into single line layout string within txb_BodyInfo control hub
-            if (txb_BodyInfo != null)
-            {
-                txb_BodyInfo.Text = $"BodyDBID: {targetedBodyDbId} | SemiMajorAxis: {anchor.SemiMajorAxis:F2} | Eccentricity: {anchor.Eccentricity:F4} | OrbitalPeriod: {anchor.OrbitalPeriod:F2} | AnchorTimestamp: {anchor.AnchorTimestampUnixSec} | AnchorDistance: {anchor.AnchorDistance:F4} | IsClimbingOutward: {anchor.IsClimbingOutward} | IsRetrograde: {anchor.IsRetrograde}";
-            }
-
-            List<double> excelDates = new List<double>();
-            List<double> distances = new List<double>();
-
-            // Channel extraction loops safely down through your central database broker functions
-            _databaseBroker.LoadTelemetryArrays(targetedBodyDbId, excelDates, distances);
-
-            if (excelDates.Count > 0)
-            {
-                RenderOrbitDiagnosticCanvas(anchor, excelDates.ToArray(), distances.ToArray(), targetedBodyDbId);
-            }
-            else
-            {
-                lblPlotterStatus.Text = "[ERROR] Telemetry extraction fault: No data points logged for this ID.";
-            }
-        }
-
-        private bool TryLoadBodyAnchor(int bodyId, out RelationalAnchor anchor)
-        {
-            anchor = new RelationalAnchor();
-
-            // Explicitly initialize your local tracking structure to standard parameter safety defaults
-            anchor.SemiMajorAxis = 0.0;
-            anchor.Eccentricity = 0.0;
-            anchor.OrbitalPeriod = 0.0;
-            anchor.IsRetrograde = false;
-            anchor.AnchorTimestampUnixSec = 0;
-            anchor.AnchorDistance = 0.0;
-            anchor.IsClimbingOutward = false;
-
-            using (var conn = _databaseBroker.OpenConnection())
-            {
+                conn.Open();
                 string query = @"
-                    SELECT SemiMajorAxis, Eccentricity, OrbitalPeriod_Sec, IsRetrograde,
-                           AnchorTimestamp_UnixSec, AnchorDistance_Ls, IsClimbingOutward
-                    FROM ObitInfo WHERE BodyDBID = @BodyID;";
+                    SELECT Timestamp_UnixSec, DistanceToArrival 
+                    FROM DataPoints WHERE BodyDBID = @BodyID ORDER BY Timestamp_UnixSec ASC;";
 
                 using (var cmd = new SqliteCommand(query, conn))
                 {
                     cmd.Parameters.AddWithValue("@BodyID", bodyId);
                     using (var reader = cmd.ExecuteReader())
                     {
-                        if (reader.Read())
+                        while (reader.Read())
                         {
-                            anchor.SemiMajorAxis = Convert.ToDouble(reader["SemiMajorAxis"]);
-                            anchor.Eccentricity = Convert.ToDouble(reader["Eccentricity"]);
-                            anchor.OrbitalPeriod = Convert.ToDouble(reader["OrbitalPeriod_Sec"]);
+                            long unixSec = Convert.ToInt64(reader["Timestamp_UnixSec"]);
+                            double dist = Convert.ToDouble(reader["DistanceToArrival"]);
 
-                            #region Protect Optional Properties from Database DBNull Errors
-                            if (reader["IsRetrograde"] != DBNull.Value)
-                            {
-                                anchor.IsRetrograde = Convert.ToBoolean(reader["IsRetrograde"]);
-                            }
+                            // Converting raw unix epoch timelines to Excel OA Date Doubles for ScottPlot canvas formatting
+                            DateTime dt = DateTimeOffset.FromUnixTimeSeconds(unixSec).DateTime;
+                            double oaDate = dt.ToOADate();
 
-                            if (reader["AnchorTimestamp_UnixSec"] != DBNull.Value)
-                            {
-                                anchor.AnchorTimestampUnixSec = Convert.ToInt64(reader["AnchorTimestamp_UnixSec"]);
-                            }
-
-                            if (reader["AnchorDistance_Ls"] != DBNull.Value)
-                            {
-                                anchor.AnchorDistance = Convert.ToDouble(reader["AnchorDistance_Ls"]);
-                            }
-
-                            if (reader["IsClimbingOutward"] != DBNull.Value)
-                            {
-                                anchor.IsClimbingOutward = Convert.ToBoolean(reader["IsClimbingOutward"]);
-                            }
-                            #endregion
-
-                            return true;
+                            excelDates.Add(oaDate);
+                            distances.Add(dist);
                         }
                     }
                 }
             }
-            return false;
         }
-        #endregion
-        #region Block 3: Continuous Math Rendering Engine and Zoom Management
         private void RenderOrbitDiagnosticCanvas(RelationalAnchor anchor, double[] dbTimestampExcelOA, double[] dbDistanceToArrival, int bodyId, ScottPlot.AxisLimits? preservedZoomLimits = null)
         {
             int totalPointsCount = dbTimestampExcelOA.Length;
@@ -238,6 +245,7 @@ namespace ED_TimeSlide
             double plotStartXExcelOA = minimumTimestampXExcelOA - Settings.PaddingTimeCushion;
             double plotEndXExcelOA = maximumTimestampXExcelOA + Settings.PaddingTimeCushion;
 
+            // Separate checking routine handles dynamic manual zoom persistence limits cleanly
             if (preservedZoomLimits.HasValue)
             {
                 double focusXMin = preservedZoomLimits.Value.HorizontalRange.Min;
@@ -258,14 +266,11 @@ namespace ED_TimeSlide
             double completedOrbitCycles = totalSpanTimeUnixSeconds / anchor.OrbitalPeriod;
             double idealCalculatedSteps = completedOrbitCycles * Settings.TargetStepsPerOrbitCycle;
 
-            int graphResolutionIntervals = Math.Max(
-                Settings.MinAdaptiveGraphResolution,
-                Math.Min(Settings.MaxAdaptiveGraphResolution, (int)idealCalculatedSteps));
-
+            int graphResolutionIntervals = Math.Max(Settings.MinAdaptiveGraphResolution, Math.Min(Settings.MaxAdaptiveGraphResolution, (int)idealCalculatedSteps));
             double calculatedStepWidthExcelOA = (plotEndXExcelOA - plotStartXExcelOA) / graphResolutionIntervals;
 
             double[] curveTimestampsExcelOA = new double[graphResolutionIntervals + 1];
-            long[] curveTimestampsUnixSecondsArray = new long[graphResolutionIntervals + 1];
+            double[] curveExpectedDistancesY = new double[graphResolutionIntervals + 1];
             double[] upperVarianceBoundsY1 = new double[graphResolutionIntervals + 1];
             double[] lowerVarianceBoundsY2 = new double[graphResolutionIntervals + 1];
 
@@ -280,7 +285,6 @@ namespace ED_TimeSlide
                 IsRetrograde = anchor.IsRetrograde
             };
 
-            var frameOptimizer = new Engine.BatchConsensusOptimizer(Settings.ScanDataDbPath);
             double absoluteMaximumDeviationLS = 0.0;
             double absoluteMaximumDeviationPercent = 0.0;
 
@@ -292,7 +296,7 @@ namespace ED_TimeSlide
             for (int i = 0; i < totalPointsCount; i++)
             {
                 long targetUnixSeconds = (long)((DateTime.FromOADate(dbTimestampExcelOA[i]) - new DateTime(1970, 1, 1)).TotalSeconds);
-                double predDist = frameOptimizer.CalculateRelativeStarCentricDistance(bodyId, physicalElements, targetUnixSeconds);
+                double predDist = KeplerOrbitSolver.PredictDistanceAtTimestamp(physicalElements, targetUnixSeconds);
 
                 double variance = Math.Abs(dbDistanceToArrival[i] - predDist);
                 double variancePct = (predDist > 0.0) ? (variance / predDist) * 100.0 : 0.0;
@@ -315,15 +319,12 @@ namespace ED_TimeSlide
             for (int step = 0; step <= graphResolutionIntervals; step++)
             {
                 double currentStepTimeExcelOA = plotStartXExcelOA + (step * calculatedStepWidthExcelOA);
-                curveTimestampsExcelOA[step] = currentStepTimeExcelOA;
-                curveTimestampsUnixSecondsArray[step] = (long)((DateTime.FromOADate(currentStepTimeExcelOA) - new DateTime(1970, 1, 1)).TotalSeconds);
-            }
-            // Execute single-call array extraction pass to draw the entire visual track instantly
-            double[] curveExpectedDistancesY = frameOptimizer.GetStarCentricTrajectorySpace(bodyId, physicalElements, curveTimestampsUnixSecondsArray);
+                long currentUnix = (long)((DateTime.FromOADate(currentStepTimeExcelOA) - new DateTime(1970, 1, 1)).TotalSeconds);
 
-            for (int step = 0; step <= graphResolutionIntervals; step++)
-            {
-                double expectedRailDistanceLS = curveExpectedDistancesY[step];
+                double expectedRailDistanceLS = KeplerOrbitSolver.PredictDistanceAtTimestamp(physicalElements, currentUnix);
+
+                curveTimestampsExcelOA[step] = currentStepTimeExcelOA;
+                curveExpectedDistancesY[step] = expectedRailDistanceLS;
                 upperVarianceBoundsY1[step] = expectedRailDistanceLS + absoluteMaximumDeviationLS;
                 lowerVarianceBoundsY2[step] = expectedRailDistanceLS - absoluteMaximumDeviationLS;
             }
@@ -378,6 +379,7 @@ namespace ED_TimeSlide
                 }
 
                 formsPlotCanvas.Refresh();
+
                 lblPlotterStatus.Text = $"[IDLE] Visual plot synchronized successfully. Max Dev: {absoluteMaximumDeviationLS:F4} Ls | Max Error: {absoluteMaximumDeviationPercent:F2}%, Total Points: {totalPointsCount}";
             }
             catch (Exception ex)
@@ -385,41 +387,6 @@ namespace ED_TimeSlide
                 lblPlotterStatus.Text = $"[ERROR] Viewport Scaling Failure: {ex.Message}";
             }
         }
-
-        private void BtnUpdateRenderCanvas_Click(object sender, EventArgs e)
-        {
-            // Capture live axis scale vectors prior to database calculation pass resets
-            ScottPlot.AxisLimits currentLimits = formsPlotCanvas.Plot.Axes.GetLimits();
-
-            if (cmbPlanetSelector.SelectedItem != null)
-            {
-                int index = cmbPlanetSelector.SelectedIndex;
-                if (index >= 0 && index < _parallelBodyDbIds.Count)
-                {
-                    int targetedBodyDbId = _parallelBodyDbIds[index];
-                    RelationalAnchor anchor;
-                    if (TryLoadBodyAnchor(targetedBodyDbId, out anchor))
-                    {
-                        List<double> excelDates = new List<double>();
-                        List<double> distances = new List<double>();
-                        _databaseBroker.LoadTelemetryArrays(targetedBodyDbId, excelDates, distances);
-
-                        if (excelDates.Count > 0)
-                        {
-                            RenderOrbitDiagnosticCanvas(anchor, excelDates.ToArray(), distances.ToArray(), targetedBodyDbId, currentLimits);
-                            return;
-                        }
-                    }
-                }
-            }
-            CmbPlanetSelector_SelectedIndexChanged(sender, e);
-        }
-
-        private void OnZoomModeChanged(object sender, EventArgs e)
-        {
-            if (sender is RadioButton rdo && rdo.Checked) ApplyZoomConstraints();
-        }
-
         private void ApplyZoomConstraints()
         {
             formsPlotCanvas.Plot.Axes.Rules.Clear();
@@ -436,18 +403,69 @@ namespace ED_TimeSlide
             }
             formsPlotCanvas.Refresh();
         }
-
-        private void BtnPreviousPlanet_Click(object sender, EventArgs e)
-        {
-            if (cmbPlanetSelector.Items.Count == 0) return;
-            cmbPlanetSelector.SelectedIndex = (cmbPlanetSelector.SelectedIndex <= 0) ? cmbPlanetSelector.Items.Count - 1 : cmbPlanetSelector.SelectedIndex - 1;
-        }
-
-        private void BtnNextPlanet_Click(object sender, EventArgs e)
-        {
-            if (cmbPlanetSelector.Items.Count == 0) return;
-            cmbPlanetSelector.SelectedIndex = (cmbPlanetSelector.SelectedIndex >= cmbPlanetSelector.Items.Count - 1) ? 0 : cmbPlanetSelector.SelectedIndex + 1;
-        }
         #endregion
+
+        // TODO move out, maybe
+        private bool TryLoadBodyAnchor(int bodyId, out RelationalAnchor anchor)
+        {
+            anchor = new RelationalAnchor();
+
+            // Explicitly initialize your local tracking structure to standard parameter safety defaults
+            anchor.SemiMajorAxis = 0.0;
+            anchor.Eccentricity = 0.0;
+            anchor.OrbitalPeriod = 0.0;
+            anchor.IsRetrograde = false;
+            anchor.AnchorTimestampUnixSec = 0;
+            anchor.AnchorDistance = 0.0;
+            anchor.IsClimbingOutward = false;
+
+            using (var conn = new SqliteConnection(_connectionString))
+            {
+                conn.Open();
+                string query = @"
+                    SELECT SemiMajorAxis, Eccentricity, OrbitalPeriod_Sec, IsRetrograde,
+                           AnchorTimestamp_UnixSec, AnchorDistance_Ls, IsClimbingOutward
+                    FROM ObitInfo WHERE BodyDBID = @BodyID;";
+
+                using (var cmd = new SqliteCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@BodyID", bodyId);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            anchor.SemiMajorAxis = Convert.ToDouble(reader["SemiMajorAxis"]);
+                            anchor.Eccentricity = Convert.ToDouble(reader["Eccentricity"]);
+                            anchor.OrbitalPeriod = Convert.ToDouble(reader["OrbitalPeriod_Sec"]);
+
+                            #region Protect Optional Properties from Database DBNull Errors
+                            if (reader["IsRetrograde"] != DBNull.Value)
+                            {
+                                anchor.IsRetrograde = Convert.ToBoolean(reader["IsRetrograde"]);
+                            }
+
+                            if (reader["AnchorTimestamp_UnixSec"] != DBNull.Value)
+                            {
+                                anchor.AnchorTimestampUnixSec = Convert.ToInt64(reader["AnchorTimestamp_UnixSec"]);
+                            }
+
+                            if (reader["AnchorDistance_Ls"] != DBNull.Value)
+                            {
+                                anchor.AnchorDistance = Convert.ToDouble(reader["AnchorDistance_Ls"]);
+                            }
+
+                            if (reader["IsClimbingOutward"] != DBNull.Value)
+                            {
+                                anchor.IsClimbingOutward = Convert.ToBoolean(reader["IsClimbingOutward"]);
+                            }
+                            #endregion
+
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
     }
 }

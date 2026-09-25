@@ -30,9 +30,14 @@ namespace ED_TimeSlide
         #endregion
 
         #region Form Events
+        /// <summary>
+        /// Fires when the user clicks the Find File button. Automatically opens the file-system
+        /// dialog, allowing multi-selection of raw JSONL streams or WinRAR archives.
+        /// </summary>
         private void but_FindFile_Click(object sender, EventArgs e)
         {
             openFileDialog1.Multiselect = true;
+
             string fileFilter = "EDDN Logs|*.jsonl;*.rar;*.bz2;*.zip|All Files|*.*";
             openFileDialog1.Filter = fileFilter;
 
@@ -46,18 +51,26 @@ namespace ED_TimeSlide
                     }
                     else
                     {
-                        txb_InputFileNames.AppendText(Environment.NewLine + file);
+                        string lineBreak = Environment.NewLine;
+                        txb_InputFileNames.AppendText(lineBreak + file);
                     }
                 }
             }
         }
-
+        /// <summary>
+        /// Fires when the user clicks the Clear File Names button. Wipes out the file tracking
+        /// textbox primitives if an active ingestion run is not running.
+        /// </summary>
         private void but_ClearFileNames_Click(object sender, EventArgs e)
         {
             if (_isProcessing) return;
             txb_InputFileNames.Text = "";
         }
-
+        /// <summary>
+        /// Fires when the user clicks the Run Ingestion button. Initializes the async task,
+        /// captures the primary UI thread synchronization context via Progress, and starts 
+        /// the pipeline with a hard-coded MaxDegreeOfParallelism safety gate.
+        /// </summary>
         private async void but_Run_Click(object sender, EventArgs e)
         {
             #region UI Parameter Gate Validation
@@ -84,21 +97,27 @@ namespace ED_TimeSlide
             try
             {
                 ToggleInterfaceControls(false);
-                txb_Status.Text = $"[{DateTime.Now:HH:mm:ss}] Initializing Data Pipelines..." + Environment.NewLine;
+
+                string initTimestamp = $"[{DateTime.Now:HH:mm:ss}]";
+                txb_Status.Text = $"{initTimestamp} Initializing Data Pipelines..." + Environment.NewLine;
+
+                // Safely reset progress control primitives on the GUI thread
                 prg_IngestionProgress.Value = 0;
                 bool useParallelProcessing = chk_MultiThreaded.Checked;
 
                 _cts = new CancellationTokenSource();
                 CancellationToken token = _cts.Token;
 
+                // PROGRESS HANDSHAKE: Automatically captures the current UI SynchronizationContext
                 var progressHandler = new Progress<double>(percentage =>
                 {
                     prg_IngestionProgress.Value = (int)Math.Min(100, Math.Max(0, percentage));
                 });
 
+                // Dispatch extraction workflow out onto a thread-pool task background lane
                 await Task.Run(() =>
                 {
-                    ExecuteExtractionWorkflow(targetFiles, useParallelProcessing, token, progressHandler);
+                    ExecuteExtractionWorkflow(targetFiles,useParallelProcessing,token,progressHandler);
                 }, token);
             }
             catch (OperationCanceledException ex)
@@ -118,18 +137,29 @@ namespace ED_TimeSlide
             }
             #endregion
         }
-
+        /// Fires when the user clicks the Abort button. Automatically triggers the cancellation
+        /// token source to request an early exit from active background processing lanes.
+        /// </summary>
         private void but_Abort_Click(object sender, EventArgs e)
         {
             if (!_isProcessing || _cts == null) return;
+
             UpdateLogDisplay("[SIGNAL SENT] Requesting pipeline abort sequence...");
             _cts.Cancel();
         }
         #endregion
 
         #region Private Functions
+        /// <summary>
+        /// Orchestrates the chronologically sorted archive processing routines. Throttles 
+        /// the parallel worker pool to a MaxDegreeOfParallelism of 2 to guarantee system stability
+        /// and prevent memory thrashing when extracting dense monthly WinRAR files.
+        /// </summary>
         private void ExecuteExtractionWorkflow(string[] files, bool runMultiThreaded, CancellationToken token, IProgress<double> progress)
         {
+            #region Sort Target Datasets Chronologically
+            UpdateLogDisplay("Sorting target archives chronologically using regex filename keys...");
+
             var sortedFiles = files
                 .Where(f => !string.IsNullOrWhiteSpace(f) && File.Exists(f))
                 .Select(f => new
@@ -146,16 +176,31 @@ namespace ED_TimeSlide
                 UpdateLogDisplay("[ABORTED] No valid target files found existing on local storage.");
                 return;
             }
+            #endregion
 
+            UpdateLogDisplay($"Target path mapped to: {Settings.ScanDataDbPath}");
+            UpdateLogDisplay("Spawning bounded database storage driver instance...");
+            #region Set total and completed variables
             int totalFiles = sortedFiles.Length;
             int completedFiles = 0;
-
-            using (var storageDriver = new ScanDataStorageDriver(token))
+            #endregion
+            #region Phase 1 process, multi or single thread
+            using (var storageDriver = new ScanDBPhase1(token))
             {
-
+                #region Multi thread
                 if (runMultiThreaded)
                 {
-                    var parallelOptions = new ParallelOptions { CancellationToken = token, MaxDegreeOfParallelism = -1 }; // -1 as many as it wants was 2 just 2 threads
+                    UpdateLogDisplay($"Spawning throttled Parallel.ForEach pipeline across {totalFiles} targets...");
+
+                    #region Configure Resilient Concurrency Safety Limits
+                    // RAM SHIELD: Limit to 2 concurrent workers to cut external process memory footprint in half
+                    var parallelOptions = new ParallelOptions
+                    {
+                        CancellationToken = token,
+                        MaxDegreeOfParallelism = 2
+                    };
+                    #endregion
+
                     try
                     {
                         Parallel.ForEach(sortedFiles, parallelOptions, currentFile =>
@@ -172,8 +217,11 @@ namespace ED_TimeSlide
                                 });
                             });
 
+                            #region Atomically increment file progress and push safely via captured UI handler
                             int currentDone = Interlocked.Increment(ref completedFiles);
-                            progress?.Report(((double)currentDone / totalFiles) * 100);
+                            double currentPct = ((double)currentDone / totalFiles) * 100;
+                            progress?.Report(currentPct);
+                            #endregion
                         });
                     }
                     catch (OperationCanceledException ex)
@@ -182,11 +230,20 @@ namespace ED_TimeSlide
                         return;
                     }
                 }
+                #endregion
+                #region Single thread
                 else
                 {
+                    UpdateLogDisplay($"Spawning sequential single-threaded loader loops across {totalFiles} targets...");
+
                     for (int i = 0; i < totalFiles; i++)
                     {
-                        if (token.IsCancellationRequested) return;
+                        if (token.IsCancellationRequested)
+                        {
+                            UpdateLogDisplay("[ABORTED] Sequential loop exited early via cancellation request.");
+                            return;
+                        }
+
                         string currentFile = sortedFiles[i];
                         UpdateLogDisplay($"[SERIAL WORKER] Extracting: {Path.GetFileName(currentFile)}");
 
@@ -200,29 +257,30 @@ namespace ED_TimeSlide
                         });
 
                         completedFiles++;
-                        progress?.Report(((double)completedFiles / totalFiles) * 100);
+                        double currentPct = ((double)completedFiles / totalFiles) * 100;
+                        progress?.Report(currentPct);
                     }
                 }
+                #endregion
                 #region Teardown & Drain Queue Processing Syncs
                 UpdateLogDisplay("All archives parsed. Draining storage writer queue buffer safely...");
                 storageDriver.CompleteIngestion();
-
-                UpdateLogDisplay("Compiling post-ingestion system hierarchy tree layouts...");
-                // Call our highly optimized single-pass deferred compiler instance
-                var broker = new ScanDatabaseBroker();
-                broker.GenerateSystemHierarchyTree(sortedFiles);
-
-                UpdateLogDisplay("Baking physical performance structural tables lookup indices...");
-                broker.BuildPerformanceIndexes();
                 #endregion
             }
+            #endregion
+            // Enforce explicit terminal fill confirmation on UI thread
             progress?.Report(100);
             UpdateLogDisplay("Pipeline processing complete. Relational tables baked securely to storage.");
-        }
 
+        }
+        /// <summary>
+        /// Marshals control state updates safely back onto the primary form thread layout
+        /// to lock or release structural input parameters during active bulk extraction.
+        /// </summary>
         private void ToggleInterfaceControls(bool state)
         {
             _isProcessing = !state;
+
             this.Invoke((MethodInvoker)delegate
             {
                 but_Run.Enabled = state;
@@ -232,25 +290,49 @@ namespace ED_TimeSlide
             });
         }
         #endregion
-
-        #region Visual UI Contexts
+        #region Visual UI Contexts (Thread-Safe Form Loggers)
+        /// <summary>
+        /// Pipes operational metric traces directly onto the dashboard's text terminal box.
+        /// Performs safe context invoking if dispatched from parallel background worker threads.
+        /// </summary>
         public void UpdateLogDisplay(string message)
         {
             if (txb_Status.InvokeRequired)
             {
-                try { txb_Status.Invoke((MethodInvoker)delegate { UpdateLogDisplay(message); }); }
-                catch { }
+                try
+                {
+                    txb_Status.Invoke((MethodInvoker)delegate
+                    {
+                        UpdateLogDisplay(message);
+                    });
+                }
+                catch (Exception ex)
+                {
+                    // Fail-safe diagnostic sink to protect tracking threads if form handle drops
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[THREAD OUT CROSS-TALK FAULT] {ex.Message}"
+                    );
+                }
                 return;
             }
-            txb_Status.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
+
+            string timestamp = $"[{DateTime.Now:HH:mm:ss}]";
+            string endBreak = Environment.NewLine;
+
+            txb_Status.AppendText($"{timestamp} {message}{endBreak}");
             txb_Status.SelectionStart = txb_Status.Text.Length;
             txb_Status.ScrollToCaret();
         }
         #endregion
 
         #region Environment Maintenance Engine
+        /// <summary>
+        /// Safely terminates stuck background subprocesses and wipes
+        /// abandoned temporary extraction workspaces from prior debug runs.
+        /// </summary>
         private void PurgeOrphanedDebugResources()
         {
+            // 1. Force close lingering WinRAR processes from aborted runs
             try
             {
                 var localProcesses = System.Diagnostics.Process.GetProcesses();
@@ -263,21 +345,41 @@ namespace ED_TimeSlide
                     }
                 }
             }
-            catch { }
+            catch
+            {
+                // Suppress permissions alerts on unmanaged system handles
+            }
 
+            // 2. Scan and shred orphaned temporary disk workspaces
             try
             {
                 string tempPath = Path.GetTempPath();
                 if (!Directory.Exists(tempPath)) return;
-                var directories = Directory.GetDirectories(tempPath, "ED_Extract_*", SearchOption.TopDirectoryOnly);
+
+                var directories = Directory.GetDirectories(
+                    tempPath,
+                    "ED_Extract_*",
+                    SearchOption.TopDirectoryOnly
+                );
+
                 foreach (string dir in directories)
                 {
-                    try { Directory.Delete(dir, true); }
-                    catch { }
+                    try
+                    {
+                        Directory.Delete(dir, true);
+                    }
+                    catch
+                    {
+                        // Skip files currently locked by active OS processes
+                    }
                 }
             }
-            catch { }
+            catch
+            {
+                // Fail-safe path if local temp folder permissions shift
+            }
         }
         #endregion
+
     }
 }
