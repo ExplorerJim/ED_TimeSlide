@@ -59,5 +59,15 @@ namespace ED_TimeSlide.Properties {
                 resourceCulture = value;
             }
         }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap ED_TimeSlide_Splash {
+            get {
+                object obj = ResourceManager.GetObject("ED_TimeSlide_Splash", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
     }
 }

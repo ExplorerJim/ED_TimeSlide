@@ -1,15 +1,21 @@
 ﻿using ED_TimeSlide.Engine;
 using ED_TimeSlide.Properties;
+using MyWinFormsApp;
 using Newtonsoft.Json;
 using System;
 using System.ComponentModel;
 using System.IO;
+using System.Threading;
 using System.Windows.Forms;
+
 
 namespace ED_TimeSlide
 {
     static class Program
     {
+        private static SplashForm splashForm;
+        private static Thread splashThread;
+
         /// <summary>
         /// The main entry point for the application.
         /// To get the packages run these commands in the Package Manager Console:
@@ -21,13 +27,66 @@ namespace ED_TimeSlide
         [STAThread]
         static void Main()
         {
-            #region Start SQLite
-            SQLitePCL.Batteries.Init();
-            #endregion
-   
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
+            // 1. Start the splash screen form on a separate thread
+            StartSplashScreen();
+
+            // 2. Perform initialization tasks
+            PerformStartupTasks();
+
+            // 3. Close the splash screen
+            CloseSplashScreen();
+
+            // 4. Run the main application form
+            Application.Run(new MDIMain());
+        }
+
+        #region Private Static Helper Engines
+        private static void VerifyAndCreateFolder(string path)
+        {
+            if (!Directory.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
+        }
+        #endregion
+
+        private static void StartSplashScreen()
+        {
+            splashThread = new Thread(() =>
+            {
+                splashForm = new SplashForm();
+                Application.Run(splashForm);
+            });
+
+            splashThread.SetApartmentState(ApartmentState.STA);
+            splashThread.IsBackground = true;
+            splashThread.Start();
+
+            // Wait brief moment to guarantee the window handle has fully generated
+            while (splashForm == null || !splashForm.IsHandleCreated)
+            {
+                Thread.Sleep(50);
+            }
+        }
+
+        private static void PerformStartupTasks()
+        {
+            // Simulation of sequential configuration and loading logic
+
+            #region Start SQLite
+            UpdateSplashStatus("Loading ScanDB...", 20);
+            SQLitePCL.Batteries.Init();
+            #endregion
+            Thread.Sleep(1000);
+
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            UpdateSplashStatus("Validating structural file streams...", 90);
+            Thread.Sleep(1000);
             #region Rigid Architecture Workspace Verification
             try
             {
@@ -50,17 +109,29 @@ namespace ED_TimeSlide
             }
             #endregion
 
-            Application.Run(new MDIMain());
+            UpdateSplashStatus("Finalizing app context launch...", 100);
+            Thread.Sleep(400);
         }
 
-        #region Private Static Helper Engines
-        private static void VerifyAndCreateFolder(string path)
+        private static void UpdateSplashStatus(string text, int percent)
         {
-            if (!Directory.Exists(path))
+            if (splashForm != null && !splashForm.IsDisposed)
             {
-                Directory.CreateDirectory(path);
+                splashForm.UpdateStatus(text, percent);
             }
         }
-        #endregion
+
+        private static void CloseSplashScreen()
+        {
+            if (splashForm != null)
+            {
+                splashForm.Invoke(new Action(() => splashForm.Close()));
+            }
+
+            if (splashThread != null && splashThread.IsAlive)
+            {
+                splashThread.Join();
+            }
+        }
     }
 }
