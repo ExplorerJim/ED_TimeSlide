@@ -157,14 +157,6 @@ namespace ED_TimeSlide
         /// </summary>
         public static Vector3D Compute3DLocalPosition(OrbitalElements elements, long currentUnixSec, long anchorUnixSec)
         {
-            // If evaluating an abstract barycenter node with a 0 radius, bypass the planet orbit math
-            if (elements.SemiMajorAxisMetres == 0.0 && elements.AnchorDistanceLs > 0.0)
-            {
-                // Dynamic systemic reorientation check: keeps the cluster facing the arrival star vector
-                double directionSign = (elements.AnchorDistanceLs > 2000.0) ? -1.0 : 1.0;
-                return new Vector3D(directionSign * elements.AnchorDistanceLs, 0, 0);
-            }
-
             if (elements.SemiMajorAxisMetres <= 0) return new Vector3D(0, 0, 0);
  
             double degToRad = Math.PI / 180.0;

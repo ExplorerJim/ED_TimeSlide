@@ -45,69 +45,55 @@ namespace ED_TimeSlide.Engine
         }
         public void ExecuteGlobalOptimizationPass(Action<string, int, int> loggerCallback)
         {
-            // Dynamically generate default rows for missing abstract barycenters before checking targets
+            // 1. Ensure all missing abstract parent frames have a safe placeholder slot initialized
             InitializeMissingBarycenterRows();
 
-            // Setup single thread debugging configuration safely
             var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = 1 };
 
-            // =================================================================================
-            // PASS 1: CORE SYSTEM CALIBRATION (Targets: Star A & Star B)
-            // =================================================================================
-            List<OptimizerTarget> pass1Targets = FetchTargetsForPass(1);
-            int pass1Count = pass1Targets.Count;
-
-            if (pass1Count > 0)
+            // 2. Query the database to find the deepest tier present in the system structure
+            int maxDepth = 0;
+            using (var conn = new SqliteConnection(_connectionString))
             {
-                loggerCallback?.Invoke($"[PASS 1] Loaded {pass1Count} core nodes. Initiating loop passes...", 0, 0);
-
-                Parallel.ForEach(pass1Targets, parallelOptions, target =>
+                conn.Open();
+                var cmd = new SqliteCommand("SELECT MAX(HierarchyDepth) FROM BaryCentreNodes;", conn);
+                var res = cmd.ExecuteScalar();
+                if (res != DBNull.Value && res != null)
                 {
-                    Interlocked.Increment(ref _totalTargetsChecked);
-                    ProcessSingleBodyConsensus(target);
-
-                    int processed = _totalTargetsChecked;
-                    if (processed % 5000 == 0 || processed == pass1Count)
-                    {
-                        loggerCallback?.Invoke(string.Empty, processed, pass1Count);
-                    }
-                });
+                    maxDepth = Convert.ToInt32(res);
+                }
             }
 
-            // =================================================================================
-            // PASS 2: OUTER CLUSTER CALIBRATION (Targets: Outer Stars C & D)
-            // =================================================================================
-            List<OptimizerTarget> pass2Targets = FetchTargetsForPass(2);
-            int pass2Count = pass2Targets.Count;
-
-            if (pass2Count > 0)
+            // 3. CORE LOOP: Execute the optimization sequence sequentially from Depth 0 to maxDepth
+            for (int currentDepth = 0; currentDepth <= maxDepth; currentDepth++)
             {
-                loggerCallback?.Invoke($"[PASS 2] Loaded {pass2Count} outer nodes. Initiating loop passes...", 0, 0);
+                // Isolate nodes belonging strictly to the active tier level
+                List<OptimizerTarget> depthTargets = FetchTargetsForDepth(currentDepth);
+                int targetCount = depthTargets.Count;
 
-                Parallel.ForEach(pass2Targets, parallelOptions, target =>
+                if (targetCount > 0)
                 {
-                    Interlocked.Increment(ref _totalTargetsChecked);
-                    ProcessSingleBodyConsensus(target);
+                    loggerCallback?.Invoke($"[PASS - HIERARCHY TIER {currentDepth}] Loaded {targetCount} nodes. Calibrating...", 0, 0);
 
-                    int processed = _totalTargetsChecked;
-                    if (processed % 5000 == 0 || processed == (pass1Count + pass2Count))
+                    Parallel.ForEach(depthTargets, parallelOptions, target =>
                     {
-                        loggerCallback?.Invoke(string.Empty, processed, (pass1Count + pass2Count));
-                    }
-                });
+                        Interlocked.Increment(ref _totalTargetsChecked);
+                        ProcessSingleBodyConsensus(target);
+                    });
+                }
             }
 
-            #region Pipeline Terminal Summary Marshalling
-            int absoluteTotalCount = pass1Count + pass2Count;
+            // 4. POST-PROCESS SWEEP: Safely bind synchronized baseline epochs to zero-radius nodes
+            CalibrateAbstractBarycenters();
+
+            #region Pipeline Terminal Summary Printout
             loggerCallback?.Invoke("----------------------------------------------------------------", 0, 0);
-            loggerCallback?.Invoke("Global optimization processing pass completed successfully.", 0, 0);
-            loggerCallback?.Invoke($"Total Bodies Evaluated: {absoluteTotalCount}", 0, 0);
+            loggerCallback?.Invoke("Top-down global optimization pass completed successfully.", 0, 0);
+            loggerCallback?.Invoke($"Total Bodies Evaluated: {_totalTargetsChecked}", 0, 0);
             loggerCallback?.Invoke($"Successfully Calibrated & Anchored: {_successfullyGraduatedCount}", 0, 0);
-            loggerCallback?.Invoke($"Skipped due to Low Telemetry Density (< 3 pts): {_skippedLowDensityCount}", 0, 0);
-            loggerCallback?.Invoke($"Skipped due to Trajectory Variance Divergence: {_skippedDivergentCount}", 0, 0);
             loggerCallback?.Invoke("----------------------------------------------------------------", 0, 0);
             #endregion
         }
+
         private List<OptimizerTarget> FetchTargetsForPass(int passNumber)
         {
             var targets = new List<OptimizerTarget>();
@@ -301,39 +287,10 @@ namespace ED_TimeSlide.Engine
                     cmd.ExecuteNonQuery();
                 }
 
-                // 2. Cascade anchor variables down through the ENTIRE parent matrix stack
-                List<int> parents = LookupAncestryChain(bodyId);
-                if (parents.Count > 0)
-                {
-                    string updateParentSql = @"
-                        UPDATE ObitInfo
-                        SET AnchorTimestamp_UnixSec = @TS,
-                            AnchorDistance_Ls = @DIST,
-                            IsClimbingOutward = @CLIMB
-                        WHERE BodyDBID = @ParentID 
-                          AND AnchorTimestamp_UnixSec IS NULL;";
-
-                    using (var transaction = conn.BeginTransaction())
-                    {
-                        using (var cmdParent = new SqliteCommand(updateParentSql, conn, transaction))
-                        {
-                            cmdParent.Parameters.AddWithValue("@TS", anchor.TimestampUnixSec);
-                            cmdParent.Parameters.AddWithValue("@DIST", anchor.DistanceToArrivalLs);
-                            cmdParent.Parameters.AddWithValue("@CLIMB", climbing);
-                            cmdParent.Parameters.Add("@ParentID", SqliteType.Integer);
-
-                            // Walk the entire chain, initializing each parent node layer natively
-                            foreach (int parentId in parents)
-                            {
-                                cmdParent.Parameters["@ParentID"].Value = parentId;
-                                cmdParent.ExecuteNonQuery();
-                            }
-                        }
-                        transaction.Commit();
-                    }
-                }
+                // FIX: The entire "2. Cascade anchor variables down..." transaction loop block is completely DELETED.
             }
         }
+
         private void WriteIsolatedDiagnosticLog(OptimizerTarget target, string failureType, int pointsCount, double maxDeviationLs)
         {
             lock (_logFileLock)
@@ -494,7 +451,7 @@ namespace ED_TimeSlide.Engine
             {
                 conn.Open();
 
-                // Direct database script: Isolates parent nodes that exist in structure but lack a row in ObitInfo
+                // 1. Isolate unique abstract parent barycenters that do not have a mapped row in ObitInfo
                 string findMissingQuery = @"
                     SELECT DISTINCT bcn.ParentBodyDBID 
                     FROM BaryCentreNodes bcn
@@ -513,15 +470,17 @@ namespace ED_TimeSlide.Engine
 
                 if (missingParentIds.Count == 0) return;
 
-                // Insert a placeholder row for each missing abstract barycenter node natively
+                // 2. Insert rows leaving anchor tracking flags as explicit, uncalibrated database NULLs
                 string insertPlaceholderQuery = @"
-                    INSERT INTO ObitInfo (
-                        BodyDBID, SemiMajorAxis, Eccentricity, OrbitalPeriod_Sec, 
-                        OrbitalInclination, Periapsis, MeanAnomaly, AscendingNode, IsRetrograde
-                    ) VALUES (
-                        @BodyID, 0.0, 0.0, 0.0, 
-                        0.0, 0.0, 0.0, 0.0, 0
-                    );";
+                        INSERT INTO ObitInfo (
+                            BodyDBID, SemiMajorAxis, Eccentricity, OrbitalPeriod_Sec, 
+                            OrbitalInclination, Periapsis, MeanAnomaly, AscendingNode, 
+                            IsRetrograde, AnchorTimestamp_UnixSec, AnchorDistance_Ls, IsClimbingOutward
+                        ) VALUES (
+                            @BodyID, 0.0, 0.0, 0.0, 
+                            0.0, 0.0, 0.0, 0.0, 
+                            0, NULL, NULL, NULL
+                        );";
 
                 using (var transaction = conn.BeginTransaction())
                 {
@@ -538,6 +497,132 @@ namespace ED_TimeSlide.Engine
                     transaction.Commit();
                 }
             }
+        }
+        private void CalibrateAbstractBarycenters()
+        {
+            using (var conn = new SqliteConnection(_connectionString))
+            {
+                conn.Open();
+
+                // 1. Identify all abstract barycenters (SMA == 0) that are still uncalibrated (NULL anchors)
+                string findNullBarycentersQuery = @"
+            SELECT BodyDBID FROM ObitInfo 
+            WHERE SemiMajorAxis = 0.0 AND AnchorTimestamp_UnixSec IS NULL;";
+
+                var barycenterIds = new List<int>();
+                using (var cmd = new SqliteCommand(findNullBarycentersQuery, conn))
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        barycenterIds.Add(Convert.ToInt32(reader["BodyDBID"]));
+                    }
+                }
+
+                if (barycenterIds.Count == 0) return;
+
+                // 2. Query builder to locate the nearest physical child body orbiting this barycenter
+                // to inherit its calibrated timeline epoch framework safely.
+                string findChildAnchorQuery = @"
+            SELECT o.AnchorTimestamp_UnixSec, o.IsClimbingOutward
+            FROM BaryCentreNodes bcn
+            JOIN ObitInfo o ON bcn.ChildBodyDBID = o.BodyDBID
+            WHERE bcn.ParentBodyDBID = @ParentID 
+              AND o.AnchorTimestamp_UnixSec IS NOT NULL
+            LIMIT 1;";
+
+                // 3. Update query that stamps the timeline anchor window onto the barycenter,
+                // but explicitly enforces a 0.0 Ls coordinate distance offset vector.
+                string updateBarycenterSql = @"
+            UPDATE ObitInfo 
+            SET AnchorTimestamp_UnixSec = @TS,
+                AnchorDistance_Ls = 0.0,
+                IsClimbingOutward = @CLIMB
+            WHERE BodyDBID = @ParentID;";
+
+                using (var transaction = conn.BeginTransaction())
+                {
+                    foreach (int baryId in barycenterIds)
+                    {
+                        long childTimestamp = 0;
+                        bool childClimbing = true;
+                        bool foundValidChild = false;
+
+                        using (var cmdChild = new SqliteCommand(findChildAnchorQuery, conn, transaction))
+                        {
+                            cmdChild.Parameters.AddWithValue("@ParentID", baryId);
+                            using (var reader = cmdChild.ExecuteReader())
+                            {
+                                if (reader.Read())
+                                {
+                                    childTimestamp = Convert.ToInt64(reader["AnchorTimestamp_UnixSec"]);
+                                    childClimbing = Convert.ToBoolean(reader["IsClimbingOutward"]);
+                                    foundValidChild = true;
+                                }
+                            }
+                        }
+
+                        // If found, synchronize the time epoch but keep the barycenter origin stable at 0.0 Ls
+                        if (foundValidChild)
+                        {
+                            using (var cmdUpdate = new SqliteCommand(updateBarycenterSql, conn, transaction))
+                            {
+                                cmdUpdate.Parameters.AddWithValue("@ParentID", baryId);
+                                cmdUpdate.Parameters.AddWithValue("@TS", childTimestamp);
+                                cmdUpdate.Parameters.AddWithValue("@CLIMB", childClimbing);
+                                cmdUpdate.ExecuteNonQuery();
+                            }
+                        }
+                    }
+                    transaction.Commit();
+                }
+            }
+        }
+        private List<OptimizerTarget> FetchTargetsForDepth(int depth)
+        {
+            var targets = new List<OptimizerTarget>();
+            using (var conn = new SqliteConnection(_connectionString))
+            {
+                conn.Open();
+
+                // This query isolates rows that haven't been calibrated yet, filtering strictly by target depth
+                string query = @"
+            SELECT o.BodyDBID, s.SystemName, b.BodyName, o.SemiMajorAxis, o.Eccentricity, o.OrbitalPeriod_Sec, o.IsRetrograde
+            FROM ObitInfo o
+            JOIN Bodies b ON o.BodyDBID = b.BodyDBID
+            JOIN StarSystems s ON b.SystemDBID = s.SystemDBID
+            WHERE o.AnchorTimestamp_UnixSec IS NULL 
+              AND o.SemiMajorAxis > 0.0
+              AND o.BodyDBID IN (SELECT ChildBodyDBID FROM BaryCentreNodes WHERE HierarchyDepth = @Depth);";
+
+                using (var cmd = new SqliteCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@Depth", depth);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            bool retrogradeVal = false;
+                            if (reader["IsRetrograde"] != DBNull.Value)
+                            {
+                                retrogradeVal = Convert.ToBoolean(reader["IsRetrograde"]);
+                            }
+
+                            targets.Add(new OptimizerTarget
+                            {
+                                BodyDBID = Convert.ToInt32(reader["BodyDBID"]),
+                                SystemName = Convert.ToString(reader["SystemName"]),
+                                BodyName = Convert.ToString(reader["BodyName"]),
+                                SemiMajorAxis = Convert.ToDouble(reader["SemiMajorAxis"]),
+                                Eccentricity = Convert.ToDouble(reader["Eccentricity"]),
+                                OrbitalPeriodSec = Convert.ToDouble(reader["OrbitalPeriod_Sec"]),
+                                IsRetrograde = retrogradeVal
+                            });
+                        }
+                    }
+                }
+            }
+            return targets;
         }
 
     }

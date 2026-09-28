@@ -425,7 +425,7 @@ namespace ED_TimeSlide
                         long parentDbId = 0;
                         string parentKey = $"{systemDbId}_{pair.Value}";
 
-                        #region If this is a Barycentre and not a body, create a Body entry for it.=
+                        #region If this is a Barycentre and not a body, create a Body entry for it.
                         if (!_bodyCache.TryGetValue(parentKey, out parentDbId))
                         {
                             using (var cmd = conn.CreateCommand())
